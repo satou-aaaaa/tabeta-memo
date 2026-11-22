@@ -271,7 +271,7 @@
         <span class="p">たんぱく質 ${pfc[0]}%</span><span class="f">脂質 ${pfc[1]}%</span><span class="c">炭水化物 ${pfc[2]}%</span>
       </div>
       <div class="pfcbar" aria-hidden="true"><i class="p" style="width:${pfc[0]}%"></i><i class="f" style="width:${pfc[1]}%"></i><i class="c" style="width:${pfc[2]}%"></i></div>
-      <p class="hint">目安のうちわけ：たんぱく質 ${Math.round((T.prot.lo * 4 / E) * 100)}〜20%・脂質 20〜30%・炭水化物 50〜65%</p>`;
+      <p class="hint pfcnote">目安 たんぱく質 ${Math.round((T.prot.lo * 4 / E) * 100)}〜20%・脂質 20〜30%・炭水化物 50〜65%</p>`;
     $("#firsthelp").hidden = !!S.helped || Object.values(S.days).some((d) => d.length);
     renderDiet(T);
     renderMoves(T);
@@ -286,10 +286,17 @@
         <button class="add" data-meal="${m}">＋ ${label}をたす</button></div>`;
     }).join("");
     const adv = advise(tot, T, es, isPast);
-    $("#advice").innerHTML = adv.map((a) => `<li class="${a.kind}">${esc(a.text)}</li>`).join("");
+    // ひとことは2つまで見せ、残りは「ほかに○件」で開く（長い画面を短くする）
+    $("#advice").innerHTML = adv.map((a, i) => `<li class="${a.kind}${i >= 2 ? " more" : ""}">${esc(a.text)}</li>`).join("")
+      + (adv.length > 2 ? `<li class="moreli"><button class="morebtn" type="button" aria-expanded="false">ほかに ${adv.length - 2} 件</button></li>` : "");
     const met = NUTS.filter((n) => status(n, tot[n.k], T[n.k]) === "ok").length;
     $("#metcount").textContent = es.length ? `目安どおりの項目 ${met} / ${NUTS.length}` : "";
-    $("#nuts").innerHTML = NUTS.map((n) => bar(n, tot[n.k], T[n.k])).join("");
+    // 主な5つ（たんぱく質・脂質・炭水化物・食物繊維・食塩）を先に。エネルギーは上の輪で見るので、ビタミン・ミネラルと一緒にたたむ
+    const MAIN = ["prot", "fat", "carb", "fib", "salt"];
+    const rest = NUTS.filter((n) => !MAIN.includes(n.k));
+    const restLow = rest.filter((n) => n.k !== "kcal" && status(n, tot[n.k], T[n.k]) !== "ok").length;
+    $("#nuts").innerHTML = MAIN.map((k) => NUTS.find((n) => n.k === k)).map((n) => bar(n, tot[n.k], T[n.k])).join("")
+      + `<details class="nutmore"><summary>ほかの ${rest.length} 項目${es.length ? `（目安の外 ${restLow}）` : ""}</summary>${rest.map((n) => bar(n, tot[n.k], T[n.k])).join("")}</details>`;
   }
 
   // 同じ食事を前に食べた日（7日前まで）。毎朝同じ・作り置きを1回で入れるため
@@ -315,10 +322,11 @@
       else if (d.blocked === "low") html = "BMI が 18.5 未満（低体重）なので、減量の目標は出しません。体重を保つ目安を出しています。";
       else if (d.blocked === "pace") html = "「早め」は BMI 25 以上の人向けです。設定で「ふつう」か「ゆっくり」を選んでください。いまは体重を保つ目安です。";
       else {
-        html = `<b>減量の目安：1日 ${fmt(T._E - T._extra)}kcal</b>（${esc(d.pace.label)}・目標 ${fmt(d.goalW, 1)}kg）。体重を保つ量 ${fmt(T._keep)}kcal より ${fmt(d.cut)}kcal 少なくしています。${T._extra ? `運動の ${fmt(T._extra)}kcal を足して、きょうは ${fmt(T._E)}kcal です。` : ""}`;
+        html = `<b>減量の目安：1日 ${fmt(T._E - T._extra)}kcal</b>（目標 ${fmt(d.goalW, 1)}kg）<br><small>体重を保つ量 ${fmt(T._keep)}kcal より ${fmt(d.cut)}kcal 少なく（${esc(d.pace.label)}）。${T._extra ? `運動の ${fmt(T._extra)}kcal を足して、きょうは ${fmt(T._E)}kcal。` : ""}`;
         if (d.floored) html += "基礎代謝より下げないよう、減らす量をおさえています。";
         const ds = Object.keys(S.weights).sort();
         if (ds.length >= 2) { const diff = S.weights[ds[ds.length - 1]] - S.weights[ds[0]]; html += ` 記録の最初から ${diff <= 0 ? "−" : "＋"}${Math.abs(diff).toFixed(1)}kg。`; }
+        html += "</small>";
       }
     }
     $("#dietline").innerHTML = html;
@@ -812,6 +820,7 @@
       if (v) S.steps[day] = v; else delete S.steps[day];
       save(); render(); toast("歩数を記録しました");
     };
+    $("#advice").addEventListener("click", (e) => { const b = e.target.closest("button.morebtn"); if (!b) return; const open = $("#advice").classList.toggle("open"); b.setAttribute("aria-expanded", open); b.textContent = open ? "とじる" : `ほかに ${$("#advice").querySelectorAll("li.more").length} 件`; });
     $("#suggest").addEventListener("click", (e) => { const b = e.target.closest("button.usemenu"); if (b) useMenu(b.dataset.name, b.dataset.meal); });
     $("#findshops").onclick = findShops;
     $("#wtsave").onclick = () => {

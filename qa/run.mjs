@@ -143,6 +143,7 @@ try {
   check("納豆2パックが入る（184kcal/100g × 90g = 166kcal）", /166kcal/.test(await page.textContent('.meal[data-meal=b]')));
   check("次の食事（12時なので昼）のおすすめが3つと、コンビニの組み合わせが2つ出る", /昼ごはんのおすすめ/.test(await page.textContent("#suggesthead")) && (await page.locator("#suggestlist li").count()) === 3 && (await page.locator("#shoplist li").count()) === 2);
   check("お店はボタンを押すまで探さない（位置を送らない）", overpass.length === 0);
+  check("見やすさ：おすすめ・ビタミンなどはたたんであり、押すと開く", !(await page.getAttribute("#suggest", "open") !== null) && await page.isHidden("#findshops") && await (async () => { await page.click("#suggest > summary"); return page.isVisible("#findshops"); })());
   await page.click("#findshops");
   await page.waitForFunction(() => /見本コンビニ/.test(document.querySelector("#shops").textContent));
   check("近くのお店：近い順に名前・距離・選び方が出る", /見本コンビニ 駅前店[\s\S]*約\d+m[\s\S]*選び方[\s\S]*見本スーパー/.test(await page.textContent("#shops")), await page.textContent("#shops"));
@@ -198,6 +199,7 @@ try {
   await page.click("#prev");
   check("前の日に移ると記録が空", /11月21日/.test(await page.textContent("#daylabel")) && (await page.locator("#meals li").count()) === 0);
   check("前の日（すぎた日）は朝のおすすめが出る", /朝ごはんのおすすめ/.test(await page.textContent("#suggesthead")));
+  if (await page.isHidden("#suggestlist li:first-child button.usemenu")) await page.click("#suggest > summary");
   await page.click("#suggestlist li:first-child button.usemenu");
   check("おすすめの献立をボタン1つで記録できる（朝に4品）", (await page.locator('.meal[data-meal=b] li').count()) >= 3);
   // 写真から（Claude の答えを貼る）

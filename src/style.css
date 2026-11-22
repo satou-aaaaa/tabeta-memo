@@ -201,3 +201,26 @@ nav.tabs button[aria-current=page] { background: color-mix(in srgb, var(--main) 
 .wcard { flex-wrap: nowrap; }
 .wcard label { flex: 1; }
 .wcard input { width: 5.5em; }
+/* 見やすさの見直し（2026-11-23 satou さん「すこし画面が見にくい」）：長い画面をたたむ・小さい字を大きく */
+.hint, .note { font-size: .92rem; line-height: 1.65; }
+.nut-t { font-size: .88rem; }
+.dietline { font-size: 1rem; line-height: 1.6; }
+.dietline small { display: block; color: var(--sub); font-size: .9rem; margin-top: 2px; }
+.advice li.more { display: none; }
+.advice.open li.more { display: block; }
+.advice li.moreli { padding: 0; background: none; }
+.advice li.moreli::before { content: none; }
+.morebtn { width: 100%; color: var(--main); font-weight: bold; }
+details.fold > summary, details.nutmore > summary { cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+details.fold > summary::-webkit-details-marker, details.nutmore > summary::-webkit-details-marker { display: none; }
+details.fold > summary::after, details.nutmore > summary::after { content: "＋"; color: var(--main); font-weight: bold; font-size: 1.1rem; }
+details.fold[open] > summary::after, details.nutmore[open] > summary::after { content: "−"; }
+details.fold > summary h2 { margin: 0; }
+details.nutmore { border-top: 1px solid var(--line); margin-top: 4px; }
+details.nutmore > summary { color: var(--main); font-weight: bold; font-size: .95rem; }
+h2.sec { font-size: 1rem; color: var(--sub); margin: 20px 4px 4px; }
+.meal li .fn { font-size: 1rem; }
+.meal li .fa { font-size: .88rem; }
+.pfc { font-size: .92rem; }
+.pfc { gap: 4px 12px; }
+.pfcnote { font-size: .85rem; }
