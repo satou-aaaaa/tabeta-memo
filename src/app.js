@@ -36,7 +36,7 @@
 
   // ---- 保存 ----
   let saveOk = true;
-  const blank = () => ({ v: 1, profile: null, days: {}, custom: [], recent: [], fav: [], weights: {} });
+  const blank = () => ({ v: 1, profile: null, days: {}, custom: [], recent: [], fav: [], weights: {}, moves: {}, steps: {} });
   function load() {
     try {
       const raw = localStorage.getItem(KEY);
@@ -102,7 +102,7 @@
   // 1日の目安。体重と身長があれば「基礎代謝基準値 × 体重 × 身体活動レベル」（BMI 25 をこえる分の体重は入れない：
   // 基礎代謝基準値は肥満の人では多めに出るため）。無ければ参照体位の推定エネルギー必要量の表。
   // 減量を選んだ人は、目標（DIET.paces）の分だけ減らす。ただし基礎代謝より下げない。
-  function targets(p, wNow) {
+  function targets(p, wNow, extra = 0) {
     const D = window.DRI, a = ageId(p.age), s = p.sex === "m" ? 0 : 1;
     let act = Number(p.act);
     if (D.eer[a][s][act] == null) act = 1;
@@ -127,7 +127,9 @@
         diet = { pace, kg, cut: keep - E, floored: keep - cut < floor, goalW: Math.round((w - kg) * 10) / 10 };
       }
     }
+    E += extra;   // 運動で使った分（安静時を引いた分）を足す
     const T = {};
+    T._extra = extra;
     T._keep = keep; T._diet = diet; T._bmi = bmi; T._bmr = bmr;
     T.kcal = { lo: E * 0.9, hi: E * 1.1, goal: E };
     const pMin = Math.max(D.protRda[a][s], (E * D.protMinPct[a]) / 100 / 4);
@@ -224,8 +226,21 @@
       <div class="nut-t">目安 ${targetText(n, t)}<span class="badge">${word}</span></div></div>`;
   }
 
+  // 運動：消費エネルギー = (メッツ − 1) × 時間 × 体重（安静にしていても使う 1 メッツ分を引く。重ねて数えないため）
+  function bodyW(d) { const D = window.DRI; const a = ageId(S.profile.age); return weightNow(d) || D.refWeight[a][S.profile.sex === "m" ? 0 : 1]; }
+  function moveKcal(m, w) { const x = window.EXERCISES.find((e) => e.id === m.id); return x ? Math.round((x.mets - 1) * (m.min / 60) * w) : 0; }
+  function exerciseKcal(d) { const w = bodyW(d); return ((S.moves || {})[d] || []).reduce((t, m) => t + moveKcal(m, w), 0); }
+  function renderMoves(T) {
+    const list = (S.moves[day] || []), w = bodyW(day);
+    $("#movelist").innerHTML = list.map((m, i) => { const x = window.EXERCISES.find((e) => e.id === m.id); return `<li><span class="fn">${esc(x ? x.label : "（運動）")} ${fmt(m.min)}分</span><span class="fa">${fmt(moveKcal(m, w))}kcal</span><button class="delmove" data-i="${i}" aria-label="${esc(x ? x.label : "運動")}を消す">×</button></li>`; }).join("");
+    $("#movetotal").textContent = T._extra ? `運動で ${fmt(T._extra)}kcal 使ったので、きょうの目安に足しています。` : "";
+    const st = S.steps[day];
+    $("#steps").value = st || "";
+    $("#stepsinfo").textContent = st ? (st >= 8000 ? `${fmt(st)}歩。1日 8,000歩の目安に届いています。` : `${fmt(st)}歩。1日 8,000歩の目安まであと ${fmt(8000 - st)}歩。`) : "";
+  }
+
   function renderToday() {
-    const T = targets(S.profile, weightNow(day));
+    const T = targets(S.profile, weightNow(day), exerciseKcal(day));
     const es = entriesOf(day);
     const tot = sum(es);
     const isPast = day < ymd(new Date());
@@ -242,6 +257,7 @@
       <div class="pfcbar" aria-hidden="true"><i class="p" style="width:${pfc[0]}%"></i><i class="f" style="width:${pfc[1]}%"></i><i class="c" style="width:${pfc[2]}%"></i></div>
       <p class="hint">目安のうちわけ：たんぱく質 ${Math.round((T.prot.lo * 4 / E) * 100)}〜20%・脂質 20〜30%・炭水化物 50〜65%</p>`;
     renderDiet(T);
+    renderMoves(T);
     renderSuggest(T, tot, es);
     $("#meals").innerHTML = MEALS.map(([m, label]) => {
       const list = es.map((e, i) => ({ e, i })).filter((x) => x.e.meal === m);
@@ -268,7 +284,7 @@
       else if (d.blocked === "low") html = "BMI が 18.5 未満（低体重）なので、減量の目標は出しません。体重を保つ目安を出しています。";
       else if (d.blocked === "pace") html = "「早め」は BMI 25 以上の人向けです。設定で「ふつう」か「ゆっくり」を選んでください。いまは体重を保つ目安です。";
       else {
-        html = `減量中：${esc(d.pace.label)}（目標 ${fmt(d.goalW, 1)}kg）。体重を保つ目安 ${fmt(T._keep)}kcal から 1日 ${fmt(d.cut)}kcal 減らした ${fmt(T._E)}kcal を目標にしています。`;
+        html = `減量中：${esc(d.pace.label)}（目標 ${fmt(d.goalW, 1)}kg）。体重を保つ目安 ${fmt(T._keep)}kcal から 1日 ${fmt(d.cut)}kcal 減らした ${fmt(T._E - T._extra)}kcal を目標にしています。${T._extra ? `運動の ${fmt(T._extra)}kcal を足して、きょうは ${fmt(T._E)}kcal です。` : ""}`;
         if (d.floored) html += "基礎代謝より下げないよう、減らす量をおさえています。";
         const ds = Object.keys(S.weights).sort();
         if (ds.length >= 2) { const diff = S.weights[ds[ds.length - 1]] - S.weights[ds[0]]; html += ` 記録の最初から ${diff <= 0 ? "−" : "＋"}${Math.abs(diff).toFixed(1)}kg。`; }
@@ -572,6 +588,19 @@
       view = "today"; render();
     });
     $("#export").onclick = exportData;
+    $("#moveadd").onclick = () => {
+      const min = Number($("#movemin").value);
+      if (!(min > 0 && min <= 600)) { $("#movemin").focus(); toast("運動した時間を分で入れてください"); return; }
+      (S.moves[day] = S.moves[day] || []).push({ id: $("#movetype").value, min: Math.round(min) });
+      $("#movemin").value = ""; save(); render(); toast("運動を記録しました");
+    };
+    $("#movelist").addEventListener("click", (e) => { const b = e.target.closest("button.delmove"); if (b) { S.moves[day].splice(Number(b.dataset.i), 1); save(); render(); } });
+    $("#stepssave").onclick = () => {
+      const v = Math.round(Number($("#steps").value));
+      if (!(v >= 0 && v <= 100000)) { $("#steps").focus(); return; }
+      if (v) S.steps[day] = v; else delete S.steps[day];
+      save(); render(); toast("歩数を記録しました");
+    };
     $("#suggest").addEventListener("click", (e) => { const b = e.target.closest("button.usemenu"); if (b) useMenu(b.dataset.name, b.dataset.meal); });
     $("#findshops").onclick = findShops;
     $("#wtsave").onclick = () => {
@@ -589,6 +618,7 @@
 
   async function start() {
     $("#act").innerHTML = ACTS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("");
+    $("#movetype").innerHTML = window.EXERCISES.map((e) => `<option value="${e.id}">${esc(e.label)}（${e.mets}メッツ）</option>`).join("");
     $("#addmeal").innerHTML = MEALS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("");
     wire();
     $("#savewarn").hidden = saveOk;
