@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://overpass-api.de; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="description" content="食べたものを記録して、カロリーと栄養の過不足を見る。記録は端末の中だけ。">
+<meta name="theme-color" content="#2f7d5b">
+<title>たべたメモ</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+<header class="top">
+  <h1>たべたメモ</h1>
+  <p class="tag">食べたものを記録して、栄養の目安と比べる</p>
+</header>
+<p id="savewarn" class="warn" hidden>この端末では記録を保存できません（プライベートモードなど）。画面を閉じると消えます。</p>
+<p id="loaderr" class="warn" hidden>食品のデータを読み込めませんでした。電波のある所でもう一度開いてください。</p>
+<main>
+  <section id="v-today">
+    <div class="daynav">
+      <button id="prev" aria-label="前の日">‹</button>
+      <button id="todaybtn" class="daylabel"><span id="daylabel"></span></button>
+      <button id="next" aria-label="次の日">›</button>
+    </div>
+    <div class="card" id="summary"></div>
+    <p id="dietline" class="dietline" hidden></p>
+    <div class="weightrow"><label>この日の体重 <input id="wt" type="number" inputmode="decimal" min="25" max="300" step="0.1"> kg</label><button id="wtsave">記録</button></div>
+    <div id="meals"></div>
+    <div class="card" id="suggest" hidden>
+      <h2 id="suggesthead">次の食事のおすすめ</h2>
+      <ul id="suggestlist" class="menus"></ul>
+      <h3>コンビニで買うなら</h3>
+      <ul id="shoplist" class="menus"></ul>
+      <p class="hint">コンビニの組み合わせは商品の種類での目安です。商品ごとに量や栄養はちがうので、袋の栄養成分表示があれば「成分表に無いものを足す」で入れると正確です。</p>
+      <button id="findshops" class="ghost">近くのコンビニ・スーパーを探す（位置を使う）</button>
+      <ul id="shops" class="shops"></ul>
+    </div>
+    <div class="card">
+      <h2>ひとこと</h2>
+      <ul id="advice" class="advice"></ul>
+      <p class="note">食事摂取基準（2025年版）の目安と比べた結果です。病気の治療中・妊娠中・授乳中の人は、医師や管理栄養士の指示を優先してください。</p>
+    </div>
+    <div class="card">
+      <h2>栄養のようす <small id="metcount"></small></h2>
+      <div id="nuts"></div>
+    </div>
+  </section>
+
+  <section id="v-week" hidden>
+    <div class="card">
+      <h2>7日間のエネルギー</h2>
+      <div id="weekchart" class="chart"></div>
+      <p id="weekinfo" class="hint"></p>
+    </div>
+    <div class="card">
+      <h2>7日間の平均</h2>
+      <p class="hint">1日ごとの多い少ないより、平均で見るのがおすすめです。</p>
+      <div id="weeknuts"></div>
+    </div>
+  </section>
+
+  <section id="v-settings" hidden>
+    <div class="card">
+      <p id="firstnote" class="first" hidden>はじめに、あなたに合う1日の目安を出すために教えてください。入れたことは端末の中だけに置き、外へは送りません。</p>
+      <h2>あなたのこと</h2>
+      <form id="profile" novalidate>
+        <fieldset class="row"><legend>性別</legend>
+          <label><input type="radio" name="sex" value="f"> 女性</label>
+          <label><input type="radio" name="sex" value="m"> 男性</label>
+        </fieldset>
+        <label class="row">年齢 <input name="age" type="number" inputmode="numeric" min="18" max="120" required> 歳</label>
+        <p id="ageerr" class="warn" hidden>18歳以上の人向けです（子どもの目安は年齢ごとに大きくちがうため）。</p>
+        <label class="row col">ふだんの体の動かし方 <select name="act" id="act"></select></label>
+        <label class="row">身長 <input name="height" type="number" inputmode="decimal" min="100" max="230" step="0.1"> cm</label>
+        <label class="row">体重 <input name="weight" type="number" inputmode="decimal" min="25" max="300" step="0.1"> kg</label>
+        <p id="bmiinfo" class="hint"></p>
+        <label class="row col">目的 <select name="goal"><option value="keep">体重を保つ・栄養のバランスを見る</option><option value="lose">体重を減らす（ダイエット）</option></select></label>
+        <label class="row col" id="paceRow" hidden>減らし方 <select name="pace">
+          <option value="slow">ゆっくり：6か月で体重の3%</option><option value="std">ふつう：3か月で体重の3%</option><option value="fast">早め：3か月で体重の5%（BMI 25 以上の人だけ）</option></select>
+          <span class="hint">日本肥満学会の指針の「3〜6か月で今の体重の3%」が基本です。急に減らすとリバウンドしやすく、筋肉も落ちます。</span></label>
+        <p id="losewarn" class="warn" hidden>BMI が 18.5 未満（低体重）です。減量はおすすめしません。体重を保つ目安を出します。</p>
+        <p id="needhw" class="warn" hidden>減量の目標を出すには、身長と体重を入れてください。</p>
+        <label class="row" id="mensesrow"><input type="checkbox" name="menses"> 月経がある（鉄の目安が変わります）</label>
+        <button class="primary" type="submit">この内容で目安を出す</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>記録の控え</h2>
+      <p class="hint" id="datainfo"></p>
+      <p class="hint">記録はこの端末のブラウザの中だけにあります。機種変更の前やブラウザのデータを消す前に、書き出しておいてください。</p>
+      <div class="btns">
+        <button id="export">ファイルに書き出す</button>
+        <label class="filebtn">ファイルから読み込む<input id="importfile" type="file" accept="application/json,.json"></label>
+      </div>
+      <button id="wipe" class="danger">記録を全部消す</button>
+    </div>
+  </section>
+
+  <section id="v-about" hidden>
+    <div class="card about">
+      <h2>このアプリについて</h2>
+      <p>食べたものを記録すると、1日の栄養の目安と比べて「足りている・少なめ・多め」と、ひとことを出します。無料で、広告も登録もありません。</p>
+      <h3>データの出どころ</h3>
+      <ul>
+        <li>食品の栄養値：<span id="srcfoods"></span>。<a href="https://www.mext.go.jp/a_menu/syokuhinseibun/mext_00001.html" rel="noopener">文部科学省のページ</a>の Excel をそのまま変換しています。</li>
+        <li>1日の目安：日本人の食事摂取基準（2025年版）（<a href="https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/kenkou_iryou/kenkou/eiyou/syokuji_kijyun.html" rel="noopener">厚生労働省</a>）。エネルギーは年齢・性別・体の動かし方ごとの推定エネルギー必要量（参照体位の人の値）です。</li>
+        <li>「茶碗1杯」などの量と、料理（カレーライスなど）の配合は、このアプリが決めた目安です。実際の量に合わせて g を直してください。</li>
+      </ul>
+      <h3>減量の目安</h3>
+      <ul>
+        <li>「3〜6か月で今の体重の3%」を基本にしています（日本肥満学会「肥満症診療ガイドライン2022」、<a href="https://c2h.niph.go.jp/results/C2H2410/C2H2410_Background.pdf" rel="noopener">国立保健医療科学院の要約</a>）。</li>
+        <li>体脂肪1kg は約7,000kcal として、1日に減らす量を出しています（<a href="https://www.mhlw.go.jp/bunya/kenkou/seikatsu/pdf/03-c-07.pdf" rel="noopener">厚生労働省 保健指導の教材</a>）。1日の目標は基礎代謝より下げません。</li>
+        <li>BMI 18.5 未満の人には減量の目標を出しません。体重を減らしても、たんぱく質・ビタミン・ミネラルの目安は減らしません。</li>
+      </ul>
+      <h3>大事なこと</h3>
+      <ul>
+        <li>目安は健康な人のためのもので、病気の治療や診断の代わりにはなりません。</li>
+        <li>食事の記録がつらく感じたり、食べることへの不安が強くなったりしたら、記録を休んでください。相談先：<a href="https://www.edcenter.ncnp.go.jp/" rel="noopener">摂食障害全国支援センター（国立精神・神経医療研究センター）</a>。</li>
+        <li>記録は端末の中だけにあり、外へは送りません。</li>
+        <li>「近くのコンビニ・スーパーを探す」を押したときだけ、約100mに丸めた位置を OpenStreetMap の検索サーバー（Overpass API）に送ります。お店のデータは © <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a> の協力者によるものです。</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs" aria-label="画面の切りかえ">
+  <button data-view="today">きょう</button>
+  <button data-view="week">1週間</button>
+  <button data-view="settings">設定</button>
+  <button data-view="about">このアプリ</button>
+</nav>
+
+<dialog id="adddlg" aria-labelledby="addtitle">
+  <div class="dlg-h">
+    <h2 id="addtitle">食べたものをたす</h2>
+    <select id="addmeal" aria-label="どの食事か"></select>
+    <button id="addclose" aria-label="閉じる">×</button>
+  </div>
+  <input id="q" type="search" placeholder="食品・料理の名前（例：ごはん、納豆、カレー）" aria-label="食品を探す" autocomplete="off">
+  <div id="results">
+    <div id="addtabs" class="seg" role="group" aria-label="一覧の切りかえ">
+      <button data-tab="common">よく食べる</button><button data-tab="recent">最近</button><button data-tab="fav">お気に入り</button>
+    </div>
+    <ul id="list" class="list"></ul>
+    <button id="opencustom" class="ghost">成分表に無いものを足す（パッケージの表示から）</button>
+    <form id="customform" class="custom" hidden>
+      <label>名前 <input name="cname" required></label>
+      <label>量の呼び方 <input name="cunit" placeholder="1食・1袋など" value="1食"></label>
+      <p class="hint">その量あたりの値（パッケージの栄養成分表示）</p>
+      <div class="grid">
+        <label>エネルギー kcal<input name="ckcal" type="number" inputmode="decimal" min="0" step="any"></label>
+        <label>たんぱく質 g<input name="cprot" type="number" inputmode="decimal" min="0" step="any"></label>
+        <label>脂質 g<input name="cfat" type="number" inputmode="decimal" min="0" step="any"></label>
+        <label>炭水化物 g<input name="ccarb" type="number" inputmode="decimal" min="0" step="any"></label>
+        <label>食塩相当量 g<input name="csalt" type="number" inputmode="decimal" min="0" step="any"></label>
+      </div>
+      <button class="primary" type="submit">この食品を足す</button>
+    </form>
+  </div>
+  <div id="pick" hidden>
+    <h3 id="pickname"></h3>
+    <div id="portions" class="seg"></div>
+    <label class="row"><span id="amtlabel">量</span> <input id="amt" type="number" inputmode="decimal" min="0" step="1"></label>
+    <p id="pickinfo" class="hint"></p>
+    <div class="btns"><button id="back">もどる</button><button id="addok" class="primary">記録する</button></div>
+  </div>
+</dialog>
+<div id="toast" role="status" hidden></div>
+<script src="data/dri.js"></script>
+<script src="data/common.js"></script>
+<script src="data/menus.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>
