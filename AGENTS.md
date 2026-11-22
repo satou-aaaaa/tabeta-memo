@@ -1,0 +1,30 @@
+# AGENTS.md
+
+食べたものを記録して、カロリーと栄養の過不足・ひとことアドバイス・次の食事の献立・減量の目標を出す PWA「たべたメモ」。GitHub Pages で公開（main の /）。記録は端末の中（localStorage）だけ。
+
+## 準備（最初に一度）
+
+```bash
+bash scripts/setup.sh   # 検査の道具（Playwright）
+```
+
+## push する前の確認
+
+```bash
+node qa/run.mjs
+```
+
+## 決まり
+
+- 食品の栄養値（data/foods.json）は文部科学省「日本食品標準成分表（八訂）増補2023年」の公式 Excel から `tools/build_foods.py` で作る。手で書き換えない。作り直すときは Actions「Foods data」（クラウドのセッションから文科省に届かないため）。
+- 1日の目安（data/dri.js）は「日本人の食事摂取基準（2025年版）」の数をそのまま写す。減量の目安（DIET）は肥満症診療ガイドライン2022 の「3〜6か月で現体重の3%」と 7,000kcal/kg。基礎代謝より下げない・BMI 18.5 未満には減量の目標を出さない・たんぱく質やビタミンの目安は減らさない。
+- 「茶碗1杯」などの量・料理の配合・献立（data/common.js・data/menus.js）は目安。成分表の食品番号だけを持ち、栄養値は持たない。
+- コンビニの組み合わせは商品の種類だけ。会社名・商品名を入れない（2026-11-22 satou さんが「近くの店＋選び方」を選んだ。商品は入れ替わりが激しく、各社のサイトから集めるのは規約の問題がある）。
+- 外へ通信するのは「近くのコンビニ・スーパーを探す」を押したときの Overpass API（OpenStreetMap）だけ。位置は小数3けた（約100m）に丸める。CSP の connect-src をこれ以上広げない。
+- アドバイスは責めない言い方にし、極端な制限・食事を抜くことをすすめない（qa/run.mjs が見る）。医療の代わりではないこと・相談先を「このアプリ」に出し続ける。
+- 機能を足す・直すたびに qa/run.mjs に検査も足す。
+
+## 共通のきまり
+
+- PR の作り方・マージの仕方は satou-aaaaa/shared-workflows の `routines/pr.md`、全体のきまりは `routines/common.md` に従う。
+- Claude 以外の AI・人が作業するときは、shared-workflows の `routines/tool-map.md` と `routines/without-claude.md` を読む。
