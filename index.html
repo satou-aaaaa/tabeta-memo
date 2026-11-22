@@ -159,6 +159,18 @@
       <button data-tab="common">よく食べる</button><button data-tab="recent">最近</button><button data-tab="fav">お気に入り</button>
     </div>
     <ul id="list" class="list"></ul>
+    <button id="openphoto" class="ghost">📷 写真から入れる（Claude で読み取る）</button>
+    <div id="photobox" class="photobox" hidden>
+      <ol>
+        <li>下の文をコピーして、Claude のアプリに食事の写真といっしょに送ります。<button id="photocopy" type="button">文をコピー</button>
+          <textarea id="photoprompt" rows="3" readonly aria-label="Claude に送る文"></textarea></li>
+        <li>Claude の答え（「たべたメモ:」で始まる1行）を、ここに貼ります。
+          <textarea id="photocode" rows="3" placeholder="たべたメモ:[...]" aria-label="Claude の答えを貼る"></textarea></li>
+      </ol>
+      <ul id="photoprev" class="photoprev"></ul>
+      <button id="photook" class="primary" hidden>チェックした品を記録する</button>
+      <p class="hint">写真はこのアプリを通らず、あなたの Claude にだけ送られます。量は見積もりなので、ちがえば g を直してください。成分表で見つかった品は成分表の値で計算します。</p>
+    </div>
     <button id="opencustom" class="ghost">成分表に無いものを足す（パッケージの表示から）</button>
     <form id="customform" class="custom" hidden>
       <label>名前 <input name="cname" required></label>
