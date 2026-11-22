@@ -15,7 +15,7 @@ const UA = "satou-aaaaa-tabeta-memo/1.0 (+https://github.com/satou-aaaaa/tabeta-
 if (process.argv.includes("--try")) {
   const emb = JSON.parse(readFileSync(path.join(root, "data/photo-emb.json"), "utf8"));
   const proc = await AutoProcessor.from_pretrained(MODEL);
-  const vis = await CLIPVisionModelWithProjection.from_pretrained(MODEL, { dtype: "quantized" });
+  const vis = await CLIPVisionModelWithProjection.from_pretrained(MODEL, { dtype: "q8" });
   for (const u of ["https://upload.wikimedia.org/wikipedia/commons/8/8a/Banana-Single.jpg", "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Natto_on_rice.jpg/640px-Natto_on_rice.jpg", "https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Japanese_curry_rice.jpg/640px-Japanese_curry_rice.jpg"]) {
     try {
       const r = await fetch(u, { headers: { "User-Agent": UA } });
