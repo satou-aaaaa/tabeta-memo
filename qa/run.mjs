@@ -24,8 +24,8 @@ const samples = [["01088", "kcal", 156], ["01088", "prot", 2.5], ["12004", "kcal
 const bad = samples.filter(([id, k, v]) => !F.has(id) || F.get(id)[k] !== v).map(([id, k, v]) => `${id}.${k}=${F.get(id)?.[k]}（${v}のはず）`);
 check("成分表：見本の値が公式の表と同じ（ごはん・卵・ほうれんそう・アマランサス）", bad.length === 0, bad.join(" "));
 const ctx = { window: {} };
-vm.runInNewContext(read("data/dri.js") + read("data/common.js") + read("data/menus.js"), ctx);
-const { DRI, COMMON, DISHES, MENUS, DIET } = ctx.window;
+vm.runInNewContext(read("data/dri.js") + read("data/common.js") + read("data/menus.js") + read("data/exercise.js"), ctx);
+const { DRI, COMMON, DISHES, MENUS, DIET, EXERCISES } = ctx.window;
 const missing = COMMON.filter((c) => !F.has(c[1])).map((c) => c[0]).concat(DISHES.flatMap((d) => d[2].filter(([id]) => !F.has(id)).map(([id]) => `${d[0]}:${id}`)));
 check("よく食べるもの・料理：食品番号が全部成分表にある", missing.length === 0, missing.join(" "));
 const names = COMMON.map((c) => c[0]).concat(DISHES.map((d) => d[0]));
@@ -45,6 +45,8 @@ check("よく食べるもの・料理：名前が重ならない・量が正の�
   check("食事摂取基準：基礎代謝基準値×参照体重×身体活動レベル が推定エネルギー必要量の表と ±60kcal で合う", off.length === 0, off.join(" "));
   check("減量の目安：体重の3%・3〜6か月・7,000kcal/kg・BMI 18.5 未満は出さない", DIET.kcalPerKg === 7000 && DIET.minBmi === 18.5 && DIET.paces.some((p) => p.pct === 3 && p.days === 90) && DIET.paces.some((p) => p.pct === 3 && p.days === 180));
 }
+check("運動：メッツ表の見本の値（ふつうに歩く 3.0・やや速歩 4.3・ジョギング 7.0・ヨガ 2.5）・id が重ならない",
+  EXERCISES.find((e) => e.id === "walk")?.mets === 3.0 && EXERCISES.find((e) => e.id === "brisk")?.mets === 4.3 && EXERCISES.find((e) => e.id === "jog")?.mets === 7.0 && EXERCISES.find((e) => e.id === "yoga")?.mets === 2.5 && new Set(EXERCISES.map((e) => e.id)).size === EXERCISES.length);
 check("食事摂取基準：見本の数が2025年版と同じ（30〜49歳女性ふつう 2,050kcal・食塩 7.5/6.5g・75歳以上の「高い」は無し）",
   DRI.eer["30"][1][1] === 2050 && DRI.eer["18"][0][2] === 3000 && DRI.salt[0] === 7.5 && DRI.salt[1] === 6.5 && DRI.eer["75"][0][2] === null && DRI.fe["30"][2] === 10.5 && DRI.fib["30"][0] === 22);
 {
@@ -226,6 +228,18 @@ try {
   await page.click("#wtsave");
   await page.click("#todaybtn");
   check("体重の変化が出る（前の日 60.5kg → きょう 59.5kg で −1.0kg）", /−1\.0kg/.test(await page.textContent("#dietline")), await page.textContent("#dietline"));
+
+  // 運動（体重 59.5kg・ジョギング 30分：(7.0−1) × 0.5時間 × 59.5kg = 179kcal を目安に足す）
+  await page.click("#movecard summary");
+  await page.selectOption("#movetype", "jog");
+  await page.fill("#movemin", "30");
+  await page.click("#moveadd");
+  check("運動：ジョギング30分で 179kcal を使い、目安が 2,140 → 2,319kcal になる", /179kcal/.test(await page.textContent("#movelist")) && /2,319kcal/.test(await page.textContent("#summary")), await page.textContent("#summary"));
+  await page.fill("#steps", "6500");
+  await page.click("#stepssave");
+  check("歩数：記録すると 8,000歩の目安まであと何歩かが出て、目安には足さない", /あと 1,500歩/.test(await page.textContent("#stepsinfo")) && /2,319kcal/.test(await page.textContent("#summary")));
+  await page.click("#movelist button.delmove");
+  check("運動：×で消すと目安がもどる", /2,140kcal/.test(await page.textContent("#summary")));
 
   // スマホ幅で横にはみ出さない
   for (const v of ["today", "week", "settings", "about"]) {
