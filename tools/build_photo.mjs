@@ -1,7 +1,7 @@
 // 写真の候補の埋め込みと、ブラウザで動かす部品をそろえる（Actions「Photo model」から動かす。HF に届く所で）。
 // - data/photo-emb.json：data/photo-labels.js の説明文を MobileCLIP S0 の文のモデル（fp32）で数の並びにしたもの（長さ1にそろえる）
 // - models/Xenova/mobileclip_s0/：ブラウザで写真を読む画像のモデル（vision_model_fp16.onnx。量子化した型は答えがはずれるので使わない）と設定・LICENSE
-// - vendor/：transformers.js（3.8.1）と ONNX Runtime の wasm（同じサイトから読むため。外の CDN を使わない）
+// - vendor/：transformers.js（3.8.1 の、ONNX Runtime を中に含む transformers.min.js）と ONNX Runtime の wasm（同じサイトから読むため。外の CDN を使わない）
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs";
 import vm from "node:vm";
 import path from "node:path";
@@ -70,6 +70,6 @@ for (const f of ["config.json", "preprocessor_config.json", "LICENSE", "onnx/vis
 // ブラウザ用の部品
 const dist = path.join(root, "tools/node_modules/@huggingface/transformers/dist");
 mkdirSync(path.join(root, "vendor"), { recursive: true });
-for (const f of ["transformers.web.min.js", "ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.wasm"]) copyFileSync(path.join(dist, f), path.join(root, "vendor", f));
+for (const f of ["transformers.min.js", "ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.wasm"]) copyFileSync(path.join(dist, f), path.join(root, "vendor", f));
 copyFileSync(path.join(root, "tools/node_modules/@huggingface/transformers/LICENSE"), path.join(root, "vendor/LICENSE-transformers.txt"));
 console.log("vendor に写した");

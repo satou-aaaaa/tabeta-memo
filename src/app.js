@@ -241,6 +241,14 @@
     $("#stepsinfo").textContent = st ? (st >= 8000 ? `${fmt(st)}歩。1日 8,000歩の目安に届いています。` : `${fmt(st)}歩。1日 8,000歩の目安まであと ${fmt(8000 - st)}歩。`) : "";
   }
 
+  // 目安までの残りを輪で見せる（こえても赤くしない。責めない言い方）
+  function ring(v, E) {
+    const r = 52, c = 2 * Math.PI * r, f = Math.max(0, Math.min(1, v / E)), left = Math.round(E - v);
+    return `<div class="ring" role="img" aria-label="目安 ${fmt(E)}kcal のうち ${fmt(v)}kcal。${left >= 0 ? `あと ${fmt(left)}kcal` : `目安より ${fmt(-left)}kcal 多い`}">
+      <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="${r}" class="ring-bg"/><circle cx="60" cy="60" r="${r}" class="ring-fg${left < 0 ? " over" : ""}" stroke-dasharray="${(c * f).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 60 60)"/></svg>
+      <div class="ring-t"><small>${left >= 0 ? "あと" : "目安より"}</small><b>${fmt(Math.abs(left))}</b><small>${left >= 0 ? "kcal" : "kcal 多め"}</small></div></div>`;
+  }
+
   function renderToday() {
     const T = targets(S.profile, weightNow(day), exerciseKcal(day));
     const es = entriesOf(day);
@@ -251,22 +259,30 @@
     const E = T._E, pfcK = tot.prot * 4 + tot.fat * 9 + tot.carb * 4;
     const pfc = pfcK ? [tot.prot * 4, tot.fat * 9, tot.carb * 4].map((x) => Math.round((x / pfcK) * 100)) : [0, 0, 0];
     $("#summary").innerHTML = `
-      <div class="big"><span class="num" id="kcal">${fmt(tot.kcal)}</span><span class="unit">kcal</span><span class="of">／ 目安 ${fmt(E)}kcal</span></div>
-      <div class="meter wide"><i style="width:${Math.min(100, (tot.kcal / E) * 100)}%"></i></div>
+      <div class="ring-row">
+        ${ring(tot.kcal, E)}
+        <dl class="kcalsum">
+          <div><dt>食べた</dt><dd><span id="kcal">${fmt(tot.kcal)}</span>kcal</dd></div>
+          <div><dt>目安</dt><dd>${fmt(E)}kcal</dd></div>
+          ${T._extra ? `<div><dt>うち運動</dt><dd>＋${fmt(T._extra)}kcal</dd></div>` : ""}
+        </dl>
+      </div>
       <div class="pfc" aria-label="エネルギーのうちわけ">
         <span class="p">たんぱく質 ${pfc[0]}%</span><span class="f">脂質 ${pfc[1]}%</span><span class="c">炭水化物 ${pfc[2]}%</span>
       </div>
       <div class="pfcbar" aria-hidden="true"><i class="p" style="width:${pfc[0]}%"></i><i class="f" style="width:${pfc[1]}%"></i><i class="c" style="width:${pfc[2]}%"></i></div>
       <p class="hint">目安のうちわけ：たんぱく質 ${Math.round((T.prot.lo * 4 / E) * 100)}〜20%・脂質 20〜30%・炭水化物 50〜65%</p>`;
+    $("#firsthelp").hidden = !!S.helped || Object.values(S.days).some((d) => d.length);
     renderDiet(T);
     renderMoves(T);
     renderSuggest(T, tot, es);
     $("#meals").innerHTML = MEALS.map(([m, label]) => {
       const list = es.map((e, i) => ({ e, i })).filter((x) => x.e.meal === m);
       const mk = sum(list.map((x) => x.e)).kcal;
-      return `<div class="meal" data-meal="${m}"><div class="meal-h"><h3>${label}</h3><span>${fmt(mk)}kcal</span></div>
-        <ul>${list.map(({ e, i }) => `<li><span class="fn">${esc(nameOf(e.key, e.label))}</span><span class="fa">${esc(amtText(e))}・${fmt(nutOf(e).kcal)}kcal</span>
+      return `<div class="meal" data-meal="${m}"><div class="meal-h"><h3><span class="mi" aria-hidden="true">${{ b: "🌅", l: "☀️", d: "🌙", s: "🍪" }[m] || ""}</span>${label}</h3><span>${fmt(mk)}kcal</span></div>
+        <ul>${list.map(({ e, i }) => `<li><button class="edit" data-i="${i}" aria-label="${esc(nameOf(e.key, e.label))}の量を直す"><span class="fn">${esc(nameOf(e.key, e.label))}</span><span class="fa">${esc(amtText(e))}・${fmt(nutOf(e).kcal)}kcal</span></button>
           <button class="del" data-i="${i}" aria-label="${esc(nameOf(e.key, e.label))}を消す">×</button></li>`).join("")}</ul>
+        ${!list.length && lastMeal(m) ? `<button class="copy" data-meal="${m}">↺ ${esc(dayShort(lastMeal(m)))}の${label}と同じ（${fmt(sum(entriesOf(lastMeal(m)).filter((e) => e.meal === m)).kcal)}kcal）</button>` : ""}
         <button class="add" data-meal="${m}">＋ ${label}をたす</button></div>`;
     }).join("");
     const adv = advise(tot, T, es, isPast);
@@ -274,6 +290,19 @@
     const met = NUTS.filter((n) => status(n, tot[n.k], T[n.k]) === "ok").length;
     $("#metcount").textContent = es.length ? `目安どおりの項目 ${met} / ${NUTS.length}` : "";
     $("#nuts").innerHTML = NUTS.map((n) => bar(n, tot[n.k], T[n.k])).join("");
+  }
+
+  // 同じ食事を前に食べた日（7日前まで）。毎朝同じ・作り置きを1回で入れるため
+  function lastMeal(m) {
+    for (let i = 1; i <= 7; i++) { const d = addDays(day, -i); if (entriesOf(d).some((e) => e.meal === m)) return d; }
+    return null;
+  }
+  const dayShort = (d) => (d === addDays(day, -1) ? "前の日" : dayLabel(d).replace(/（.）$/, ""));
+  function copyMeal(m) {
+    const from = lastMeal(m); if (!from) return;
+    const add = entriesOf(from).filter((e) => e.meal === m).map((e) => JSON.parse(JSON.stringify(e)));
+    (S.days[day] = S.days[day] || []).push(...add);
+    save(); render(); toast(`${add.length} 品を入れました。ちがう品は × で消せます`);
   }
 
   // 減量の目標と体重
@@ -385,6 +414,25 @@
     $("#weekinfo").textContent = logged.length ? `記録のある ${logged.length} 日の平均です（記録の無い日は入れません）。` : "この7日間はまだ記録がありません。";
     const avg = Object.fromEntries(NKEYS.map((k) => [k, logged.length ? logged.reduce((s, x) => s + x.t[k], 0) / logged.length : 0]));
     $("#weeknuts").innerHTML = NUTS.map((n) => bar(n, avg[n.k], T[n.k])).join("");
+    renderWeightChart();
+  }
+
+  // 体重の移り変わり（30日）。毎日の上下より、7日の平均の線で見る
+  function renderWeightChart() {
+    const ds = []; for (let i = 29; i >= 0; i--) ds.push(addDays(day, -i));
+    const pts = ds.map((d, i) => [i, S.weights[d]]).filter(([, w]) => w);
+    const box = $("#wchart");
+    if (pts.length < 2) { box.innerHTML = `<p class="hint">体重を2日以上記録すると、ここに30日の移り変わりが出ます（きょうの画面の「体重」）。</p>`; return; }
+    const ws = pts.map(([, w]) => w), lo = Math.floor(Math.min(...ws) - 0.5), hi = Math.ceil(Math.max(...ws) + 0.5);
+    const W = 300, H = 120, x = (i) => 8 + (i / 29) * (W - 16), y = (w) => 8 + ((hi - w) / (hi - lo)) * (H - 24);
+    const avg = pts.map(([i]) => { const near = pts.filter(([j]) => j <= i && j > i - 7).map(([, w]) => w); return [i, near.reduce((a, b) => a + b, 0) / near.length]; });
+    const line = (a) => a.map(([i, w], k) => `${k ? "L" : "M"}${x(i).toFixed(1)},${y(w).toFixed(1)}`).join("");
+    const first = pts[0][1], last = pts[pts.length - 1][1], diff = last - first;
+    box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="30日の体重。${fmt(first, 1)}kg から ${fmt(last, 1)}kg">
+      <text x="${W - 4}" y="12" text-anchor="end" class="ax">${hi}kg</text><text x="${W - 4}" y="${H - 14}" text-anchor="end" class="ax">${lo}kg</text>
+      ${pts.map(([i, w]) => `<circle cx="${x(i).toFixed(1)}" cy="${y(w).toFixed(1)}" r="2.5" class="dot"/>`).join("")}
+      <path d="${line(avg)}" class="avg"/></svg>
+      <p class="hint">点は記録した日、線は7日の平均。30日で ${diff <= 0 ? "−" : "＋"}${Math.abs(diff).toFixed(1)}kg（${fmt(first, 1)} → ${fmt(last, 1)}kg）。1日の上下は水分で変わるので、線の向きを見てください。</p>`;
   }
 
   function renderSettings(first) {
@@ -410,12 +458,13 @@
   }
 
   // ---- 食べたものをたす ----
-  let addMeal = "b", picked = null, tab = "common";
+  let addMeal = "b", picked = null, tab = "common", editIdx = -1;
   function openAdd(meal) {
-    addMeal = meal; picked = null;
+    addMeal = meal; picked = null; editIdx = -1;
+    $("#addok").textContent = "記録する";
     $("#addmeal").value = meal;
     $("#q").value = "";
-    $("#photobox").hidden = true; $("#photocode").value = ""; $("#photoprev").innerHTML = ""; $("#photook").hidden = true;
+    $("#photobox").hidden = true; $("#aibox").hidden = true; $("#photocode").value = ""; $("#photoprev").innerHTML = ""; $("#photook").hidden = true;
     $("#pick").hidden = true; $("#results").hidden = false; $("#customform").hidden = true;
     $("#adddlg").showModal ? $("#adddlg").showModal() : $("#adddlg").setAttribute("open", "");
     showList();
@@ -498,10 +547,29 @@
     const n = nutOf({ key: picked.key, amt });
     $("#pickinfo").textContent = `${fmt(n.kcal)}kcal・たんぱく質 ${fmt(n.prot, 1)}g・脂質 ${fmt(n.fat, 1)}g・炭水化物 ${fmt(n.carb, 1)}g・食塩 ${fmt(n.salt, 1)}g`;
   }
+  // 記録した品をおして、量・食事を直す（消して入れ直さなくてよいように）
+  function openEdit(i) {
+    const e = entriesOf(day)[i];
+    if (!e) return;
+    const [t] = splitKey(e.key);
+    if (t === "x") { toast("写真の見積もりの品は量を直せません。消して入れ直してください"); return; }
+    openAdd(e.meal);
+    pick(e.key);
+    if (!picked) { closeAdd(); return; }
+    editIdx = i;
+    $("#amt").value = e.amt;
+    $("#addok").textContent = "直す";
+    previewPick();
+  }
   function commitPick() {
     const amt = Number($("#amt").value);
     if (!picked || !(amt > 0) || amt > 5000) { $("#amt").focus(); return; }
-    (S.days[day] = S.days[day] || []).push({ key: picked.key, amt, meal: $("#addmeal").value });
+    const es = (S.days[day] = S.days[day] || []);
+    if (editIdx >= 0 && es[editIdx] && es[editIdx].key === picked.key) {
+      Object.assign(es[editIdx], { amt, meal: $("#addmeal").value });
+      editIdx = -1; save(); closeAdd(); render(); toast(`${picked.name}の量を直しました`); return;
+    }
+    es.push({ key: picked.key, amt, meal: $("#addmeal").value });
     S.recent = [picked.key].concat(S.recent.filter((k) => k !== picked.key)).slice(0, 30);
     save(); closeAdd(); render();
     toast(`${picked.name}を記録しました`);
@@ -555,12 +623,13 @@
     }).join("") || `<li class="empty">品目がありませんでした。</li>`;
     $("#photook").hidden = !items.length;
   }
-  function commitPhoto() {
+  function commitPhoto(items, box) {
+    if (!Array.isArray(items)) { items = photoItems; box = "#photoprev"; }
     const meal = $("#addmeal").value, list = (S.days[day] = S.days[day] || []);
     let n = 0;
-    photoItems.forEach((it, i) => {
-      if (!$(`#photoprev input[data-i="${i}"]`).checked) return;
-      const amt = Number($(`#photoprev input[data-g="${i}"]`).value) || 0;
+    items.forEach((it, i) => {
+      if (!$(`${box} input[data-i="${i}"]`).checked) return;
+      const amt = Number($(`${box} input[data-g="${i}"]`).value) || 0;
       if (!(amt > 0)) return;
       if (it.hit) list.push({ key: it.hit.key, amt, meal, label: it.name });
       else {
@@ -573,6 +642,67 @@
     });
     if (!n) return;
     save(); closeAdd(); render(); toast(`写真から ${n} 品を記録しました。量がちがうものは消して入れ直せます`);
+  }
+
+  // ---- 写真から探す（端末の中の画像AI：MobileCLIP S0。写真と、食品の説明文の埋め込みを照らし合わせて近い順に出す） ----
+  // 部品（vendor/・models/・data/photo-emb.json）は Actions「Photo model」が作る。押したときだけ読む。外へは何も送らない。
+  let ai = null, aiItems = [];
+  async function loadAI() {
+    if (ai) return ai;
+    const T = await import(new URL("vendor/transformers.min.js", document.baseURI).href);
+    T.env.allowRemoteModels = false;
+    T.env.allowLocalModels = true;
+    T.env.localModelPath = new URL("models/", document.baseURI).href;
+    T.env.backends.onnx.wasm.wasmPaths = new URL("vendor/", document.baseURI).href;
+    T.env.backends.onnx.wasm.numThreads = 1;
+    T.env.backends.onnx.wasm.proxy = false;
+    const [proc, vis, emb] = await Promise.all([
+      T.AutoProcessor.from_pretrained("Xenova/mobileclip_s0"),
+      T.CLIPVisionModelWithProjection.from_pretrained("Xenova/mobileclip_s0", { dtype: "fp16", device: "wasm" }),
+      fetch("data/photo-emb.json").then((r) => { if (!r.ok) throw new Error("emb " + r.status); return r.json(); }),
+    ]);
+    ai = { T, proc, vis, emb };
+    return ai;
+  }
+  // 画像の埋め込み（長さ1）と、説明文の埋め込みの内積を、近い順に並べる。同じ品は1つにまとめる。
+  function rankByEmbedding(vec, emb, top) {
+    let n = 0; for (const x of vec) n += x * x; n = Math.sqrt(n) || 1;
+    const best = new Map();
+    emb.vectors.forEach((t, i) => {
+      let d = 0; for (let j = 0; j < t.length; j++) d += t[j] * vec[j];
+      const k = emb.keys[i], s = d / n;
+      if (!best.has(k) || best.get(k) < s) best.set(k, s);
+    });
+    return [...best].sort((a, b) => b[1] - a[1]).slice(0, top || 6);
+  }
+  async function readPhotoAI(file) {
+    if (!file) return;
+    $("#aibox").hidden = false; $("#aiok").hidden = true; $("#aiprev").innerHTML = "";
+    const img = $("#aiimg");
+    if (img.src) URL.revokeObjectURL(img.src);
+    img.src = URL.createObjectURL(file);
+    $("#aistat").textContent = ai ? "写真を読んでいます…" : "はじめの1回は AI の部品を読み込みます（少し時間がかかります）…";
+    try {
+      const A = await loadAI();
+      $("#aistat").textContent = "写真を読んでいます…";
+      const raw = await A.T.RawImage.fromBlob(file);
+      const { image_embeds } = await A.vis(await A.proc(raw));
+      showAI(rankByEmbedding(Array.from(image_embeds.data), A.emb, 6));
+    } catch (e) {
+      console.warn(e);
+      $("#aistat").textContent = "この端末では AI を動かせませんでした。名前で探すか、下の「Claude で読み取る」を使ってください。";
+    }
+  }
+  function showAI(ranked) {
+    aiItems = ranked.map(([k]) => itemOf(k)).filter(Boolean).map((hit) => ({ name: hit.name, g: hit.g || 0, hit }));
+    $("#aistat").textContent = aiItems.length ? "近い順の候補です。合うものにチェックしてください（いくつでも）。" : "候補が見つかりませんでした。";
+    $("#aiprev").innerHTML = aiItems.map((it, i) => {
+      const isDish = it.hit.key.startsWith("d:");
+      const amt = isDish ? 1 : it.g || 100;
+      return `<li><label><input type="checkbox" data-i="${i}"${i ? "" : " checked"}> <b>${esc(it.name)}</b></label>
+        <span>${isDish ? `<input type="hidden" data-g="${i}" value="1">1人前（目安）` : `<input type="number" inputmode="decimal" min="1" max="2000" data-g="${i}" value="${Math.round(amt)}" aria-label="${esc(it.name)}の量（g）"> g`}・${fmt(nutOf({ key: it.hit.key, amt }).kcal)}kcal</span></li>`;
+    }).join("");
+    $("#aiok").hidden = !aiItems.length;
   }
 
   let toastT;
@@ -608,6 +738,8 @@
     $("#todaybtn").onclick = () => { day = ymd(new Date()); render(); };
     $("#meals").addEventListener("click", (e) => {
       const a = e.target.closest("button.add"); if (a) return openAdd(a.dataset.meal);
+      const c = e.target.closest("button.copy"); if (c) return copyMeal(c.dataset.meal);
+      const ed = e.target.closest("button.edit"); if (ed) return openEdit(Number(ed.dataset.i));
       const d = e.target.closest("button.del");
       if (d) { const es = S.days[day]; const [x] = es.splice(Number(d.dataset.i), 1); save(); render(); toast(`${nameOf(x.key, x.label)}を消しました`); }
     });
@@ -623,10 +755,13 @@
     $("#addok").onclick = commitPick;
     $("#back").onclick = () => { $("#pick").hidden = true; $("#results").hidden = false; };
     $("#addclose").onclick = closeAdd;
+    $("#firstok").onclick = () => { S.helped = true; save(); render(); };
     $("#openphoto").onclick = () => { $("#photobox").hidden = !$("#photobox").hidden; $("#photoprompt").value = PHOTO_PROMPT; };
     $("#photocopy").onclick = async () => { try { await navigator.clipboard.writeText(PHOTO_PROMPT); toast("コピーしました。Claude に写真といっしょに送ってください"); } catch (e) { $("#photoprompt").select(); toast("下の文を長押ししてコピーしてください"); } };
     $("#photocode").addEventListener("input", showPhotoPreview);
-    $("#photook").onclick = commitPhoto;
+    $("#photook").onclick = () => commitPhoto();
+    $("#aifile").addEventListener("change", (e) => { readPhotoAI(e.target.files[0]); e.target.value = ""; });
+    $("#aiok").onclick = () => commitPhoto(aiItems, "#aiprev");
     $("#opencustom").onclick = () => { $("#customform").hidden = false; $("#customform").cname.value = $("#q").value.trim(); $("#customform").cname.focus(); };
     $("#customform").addEventListener("submit", commitCustom);
     const pf = $("#profile");
@@ -694,7 +829,7 @@
     document.body.classList.add("ready");
     render();
   }
-  window.TABETA = { targets, advise, sum, search: (q) => search(q), nutOf, get state() { return S; } };
+  window.TABETA = { rankByEmbedding, copyMeal, openEdit, showAI, targets, advise, sum, search: (q) => search(q), nutOf, get state() { return S; } };
   start();
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 })();
