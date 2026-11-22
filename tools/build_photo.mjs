@@ -1,6 +1,6 @@
 // 写真の候補の埋め込みと、ブラウザで動かす部品をそろえる（Actions「Photo model」から動かす。HF に届く所で）。
 // - data/photo-emb.json：data/photo-labels.js の説明文を MobileCLIP S0 の文のモデル（fp32）で数の並びにしたもの（長さ1にそろえる）
-// - models/Xenova/mobileclip_s0/：ブラウザで写真を読む画像のモデル（vision_model_quantized.onnx 約12MB）と設定・LICENSE
+// - models/Xenova/mobileclip_s0/：ブラウザで写真を読む画像のモデル（vision_model_fp16.onnx。量子化した型は答えがはずれるので使わない）と設定・LICENSE
 // - vendor/：transformers.js（3.8.1）と ONNX Runtime の wasm（同じサイトから読むため。外の CDN を使わない）
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs";
 import vm from "node:vm";
@@ -11,7 +11,8 @@ const root = process.argv[2] || ".";
 const MODEL = "Xenova/mobileclip_s0";
 const UA = "satou-aaaaa-tabeta-memo/1.0 (+https://github.com/satou-aaaaa/tabeta-memo)";
 
-// --try：Wikimedia Commons で見本の写真を探し、画像のモデルの型（fp32・q8・uint8・fp16）ごとに上位3つを出す（ログで見るだけ。どの型がよいか決めるため）
+// --try：Wikimedia Commons で見本の写真を探し、画像のモデルの型ごとに上位3つを出す（ログで見るだけ）。
+// 2026-11-22 に比べた結果：fp32・fp16 は16枚中13枚で正しい品が3位以内。q8・uint8（量子化）は全部はずれた（使わない）。ブラウザは fp16 を使う。
 if (process.argv.includes("--try")) {
   const emb = JSON.parse(readFileSync(path.join(root, "data/photo-emb.json"), "utf8"));
   const proc = await AutoProcessor.from_pretrained(MODEL);
@@ -29,7 +30,7 @@ if (process.argv.includes("--try")) {
       await new Promise((ok) => setTimeout(ok, 500));
     } catch (e) { console.log(q, String(e)); }
   }
-  for (const dtype of ["fp32", "q8", "uint8", "fp16"]) {
+  for (const dtype of ["fp16", "fp32"]) {
     let vis;
     try { vis = await CLIPVisionModelWithProjection.from_pretrained(MODEL, { dtype }); } catch (e) { console.log(dtype, "読めない", String(e).slice(0, 80)); continue; }
     console.log("== 型", dtype);
@@ -60,7 +61,7 @@ console.log("埋め込み", labels.length, "×", dim);
 const base = `https://huggingface.co/${MODEL}/resolve/main/`;
 const dir = path.join(root, "models", MODEL);
 mkdirSync(path.join(dir, "onnx"), { recursive: true });
-for (const f of ["config.json", "preprocessor_config.json", "LICENSE", "onnx/vision_model_quantized.onnx"]) {
+for (const f of ["config.json", "preprocessor_config.json", "LICENSE", "onnx/vision_model_fp16.onnx"]) {
   const r = await fetch(base + f, { headers: { "User-Agent": UA } });
   if (!r.ok) throw new Error(`${f}: HTTP ${r.status}`);
   writeFileSync(path.join(dir, f), Buffer.from(await r.arrayBuffer()));
