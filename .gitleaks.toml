@@ -1,0 +1,7 @@
+# gitleaks の設定（Secret scan が読む）。ふつうの決まりはそのまま使う。
+[extend]
+useDefault = true
+
+[allowlist]
+description = "外から写した部品（transformers.js の圧縮した本体）。unk_token などの名前が API キーに見えるだけで、秘密は入っていない（2026-11-23 PR #4）"
+paths = ['''^vendor/transformers\.min\.js$''']

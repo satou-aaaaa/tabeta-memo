@@ -1,0 +1,44 @@
+name: Photo model
+run-name: "Photo model"
+
+# 写真から食品の候補を出す、端末の中で動く画像AI（MobileCLIP S0）の部品をそろえる（Claude は使わない）。
+# クラウドのセッションから huggingface.co に届かないため、Actions で取ってくる。作ったものは枝 photo-model に置き、中身を見てから PR で main に入れる。
+# 取るのは huggingface.co の Xenova/mobileclip_s0（Apple のライセンス。LICENSE を一緒に置く）と npm の @huggingface/transformers 3.8.1 だけ。
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore: [main, photo-model]
+    paths: [tools/build_photo.mjs, tools/package.json, tools/package-lock.json, data/photo-labels.js, .github/workflows/photo-model.yml]
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: 部品を入れる
+        working-directory: tools
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: 埋め込み・画像のモデル・ブラウザ用の部品を作る
+        run: node tools/build_photo.mjs .
+      - name: 見本の写真で試す（結果を見るだけ）
+        continue-on-error: true
+        run: node tools/build_photo.mjs . --try
+      - name: 枝 photo-model に置く
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B photo-model
+          git add data/photo-emb.json models vendor
+          git commit -m "写真の候補：MobileCLIP S0 の画像のモデル・説明文の埋め込み・transformers.js 3.8.1 を置く"
+          git push -f origin photo-model

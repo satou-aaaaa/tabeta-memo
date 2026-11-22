@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://overpass-api.de; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://overpass-api.de; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="description" content="食べたものを記録して、カロリーと栄養の過不足を見る。記録は端末の中だけ。">
 <meta name="theme-color" content="#2f7d5b">
 <title>たべたメモ</title>
@@ -11,10 +11,11 @@
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="src/style.css">
+<link rel="stylesheet" href="src/a11y.css">
 </head>
 <body>
 <header class="top">
-  <h1>たべたメモ</h1>
+  <h1><img src="icon-192.png" alt="" width="28" height="28" class="logo">たべたメモ</h1>
   <p class="tag">食べたものを記録して、栄養の目安と比べる</p>
 </header>
 <p id="savewarn" class="warn" hidden>この端末では記録を保存できません（プライベートモードなど）。画面を閉じると消えます。</p>
@@ -26,9 +27,18 @@
       <button id="todaybtn" class="daylabel"><span id="daylabel"></span></button>
       <button id="next" aria-label="次の日">›</button>
     </div>
+    <div class="card first" id="firsthelp" hidden>
+      <h2>はじめに</h2>
+      <ol class="steps">
+        <li>食事の「＋」から、食べたものを名前か写真で入れます。</li>
+        <li>上の数字が、きょうの目安までどれだけかです。下に栄養の過不足とひとことが出ます。</li>
+        <li>毎朝、体重を入れると、目安とグラフ（1週間）が合っていきます。</li>
+      </ol>
+      <button id="firstok" class="primary">わかった</button>
+    </div>
     <div class="card" id="summary"></div>
     <p id="dietline" class="dietline" hidden></p>
-    <div class="weightrow"><label>この日の体重 <input id="wt" type="number" inputmode="decimal" min="25" max="300" step="0.1"> kg</label><button id="wtsave">記録</button></div>
+    <div class="weightrow card wcard"><span class="mi" aria-hidden="true">⚖️</span><label>体重 <input id="wt" type="number" inputmode="decimal" min="25" max="300" step="0.1"> kg</label><button id="wtsave">記録</button></div>
     <details class="card moves" id="movecard">
       <summary><h2>運動・歩数</h2><span id="movetotal" class="hint"></span></summary>
       <div class="weightrow"><label>歩数 <input id="steps" type="number" inputmode="numeric" min="0" max="100000" step="1"> 歩</label><button id="stepssave">記録</button></div>
@@ -63,6 +73,10 @@
       <h2>7日間のエネルギー</h2>
       <div id="weekchart" class="chart"></div>
       <p id="weekinfo" class="hint"></p>
+    </div>
+    <div class="card">
+      <h2>体重（30日）</h2>
+      <div id="wchart" class="wchart"></div>
     </div>
     <div class="card">
       <h2>7日間の平均</h2>
@@ -106,6 +120,14 @@
       </div>
       <button id="wipe" class="danger">記録を全部消す</button>
     </div>
+    <div class="card">
+      <h2>使いやすさ</h2>
+      <div class="btns">
+        <button type="button" data-a11y-open>見やすさの設定（文字・色・動き・読み上げ）</button>
+        <a class="btnlink" id="feedback" href="https://docs.google.com/forms/d/e/1FAIpQLSftS0o3joZDdMLIBL_czoEonBo2tu9_ilndrUc89b2Waktmvw/viewform?usp=pp_url&amp;entry.443796210=%E3%81%9F%E3%81%B9%E3%81%9F%E3%83%A1%E3%83%A2" target="_blank" rel="noopener">感想・不具合を送る（Google フォーム）</a>
+      </div>
+      <p class="hint">フォームには記録の中身は入りません。書いたことだけが送られます。</p>
+    </div>
   </section>
 
   <section id="v-about" hidden>
@@ -134,6 +156,7 @@
         <li>目安は健康な人のためのもので、病気の治療や診断の代わりにはなりません。</li>
         <li>食事の記録がつらく感じたり、食べることへの不安が強くなったりしたら、記録を休んでください。相談先：<a href="https://www.edcenter.ncnp.go.jp/" rel="noopener">摂食障害全国支援センター（国立精神・神経医療研究センター）</a>。</li>
         <li>記録は端末の中だけにあり、外へは送りません。</li>
+        <li>「写真から探す」は、写真をこの端末の中だけで読みます（外へ送りません）。使っている画像 AI は Apple の <a href="https://huggingface.co/Xenova/mobileclip_s0" rel="noopener">MobileCLIP S0</a>（Apple のライセンス、models/ に原文）を <a href="https://github.com/huggingface/transformers.js" rel="noopener">Transformers.js</a>（Apache-2.0）で動かしています。AI が出すのは「何の料理に近いか」の候補だけで、量や栄養は成分表から計算します。</li>
         <li>「近くのコンビニ・スーパーを探す」を押したときだけ、約100mに丸めた位置を OpenStreetMap の検索サーバー（Overpass API）に送ります。お店のデータは © <a href="https://www.openstreetmap.org/copyright" rel="noopener">OpenStreetMap</a> の協力者によるものです。</li>
       </ul>
     </div>
@@ -141,10 +164,10 @@
 </main>
 
 <nav class="tabs" aria-label="画面の切りかえ">
-  <button data-view="today">きょう</button>
-  <button data-view="week">1週間</button>
-  <button data-view="settings">設定</button>
-  <button data-view="about">このアプリ</button>
+  <button data-view="today"><span class="ti" aria-hidden="true">🍽️</span>きょう</button>
+  <button data-view="week"><span class="ti" aria-hidden="true">📈</span>1週間</button>
+  <button data-view="settings"><span class="ti" aria-hidden="true">⚙️</span>設定</button>
+  <button data-view="about"><span class="ti" aria-hidden="true">ℹ️</span>説明</button>
 </nav>
 
 <dialog id="adddlg" aria-labelledby="addtitle">
@@ -155,11 +178,20 @@
   </div>
   <input id="q" type="search" placeholder="食品・料理の名前（例：ごはん、納豆、カレー）" aria-label="食品を探す" autocomplete="off">
   <div id="results">
+    <label id="openai" class="ghost filebtn">📷 写真から探す（この端末の中のAI）
+      <input id="aifile" type="file" accept="image/*" >
+    </label>
+    <div id="aibox" class="photobox" hidden aria-live="polite">
+      <div class="airow"><img id="aiimg" alt="選んだ写真"><p id="aistat" class="hint"></p></div>
+      <ul id="aiprev" class="photoprev"></ul>
+      <button id="aiok" class="primary" hidden>チェックした品を記録する</button>
+      <p class="hint">写真はこの端末の中だけで読み、外へ送りません。はじめの1回だけ AI の部品（約45MB）をこのサイトから取ります（Wi-Fi がおすすめ）。AI は「何の料理か」の候補を出すだけで、量は分かりません。いちばん近いものにチェックし、量を直してください。</p>
+    </div>
     <div id="addtabs" class="seg" role="group" aria-label="一覧の切りかえ">
       <button data-tab="common">よく食べる</button><button data-tab="recent">最近</button><button data-tab="fav">お気に入り</button>
     </div>
     <ul id="list" class="list"></ul>
-    <button id="openphoto" class="ghost">📷 写真から入れる（Claude で読み取る）</button>
+    <button id="openphoto" class="ghost">📝 写真から入れる（Claude で読み取る・量も見積もる）</button>
     <div id="photobox" class="photobox" hidden>
       <ol>
         <li>下の文をコピーして、Claude のアプリに食事の写真といっしょに送ります。<button id="photocopy" type="button">文をコピー</button>
@@ -200,5 +232,6 @@
 <script src="data/menus.js"></script>
 <script src="data/exercise.js"></script>
 <script src="src/app.js"></script>
+<script src="src/a11y.js"></script>
 </body>
 </html>

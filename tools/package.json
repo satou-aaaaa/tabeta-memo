@@ -1,0 +1,8 @@
+{
+  "name": "tabeta-memo-tools",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@huggingface/transformers": "3.8.1"
+  }
+}

@@ -56,7 +56,16 @@ check("食事摂取基準：見本の数が2025年版と同じ（30〜49歳女�
   check("index.html の最初の行が <!doctype html>", idx.startsWith("<!doctype html>"));
   check("出典と注意書き（医療の代わりではない・相談先）がある", /mext\.go\.jp/.test(idx) && /mhlw\.go\.jp/.test(idx) && /代わりにはなりません/.test(idx) && /摂食障害/.test(idx));
   const app = read("src/app.js");
-  check("アプリが外へ送るのはお店を探すときの Overpass だけ（fetch は2か所・XMLHttpRequest・sendBeacon を使わない）", (app.match(/fetch\(/g) || []).length === 2 && /fetch\("data\/foods\.json"\)/.test(app) && /fetch\(OVERPASS/.test(app) && !/XMLHttpRequest|sendBeacon|WebSocket/.test(app));
+  check("アプリが外へ送るのはお店を探すときの Overpass だけ（fetch は3か所：食品・写真の候補・Overpass。XMLHttpRequest・sendBeacon を使わない）", (app.match(/fetch\(/g) || []).length === 3 && /fetch\("data\/foods\.json"\)/.test(app) && /fetch\("data\/photo-emb\.json"\)/.test(app) && /fetch\(OVERPASS/.test(app) && !/XMLHttpRequest|sendBeacon|WebSocket/.test(app));
+  check("写真の AI：モデルは同じサイトからだけ読む（allowRemoteModels = false・外の CDN を使わない）・CSP は wasm を動かすだけ広げる", /allowRemoteModels = false/.test(app) && /localModelPath = new URL\("models\/"/.test(app) && /wasmPaths = new URL\("vendor\/"/.test(app) && /script-src 'self' 'wasm-unsafe-eval';/.test(idx) && !/cdn\.|huggingface/.test(app));
+  {
+    const emb = JSON.parse(read("data/photo-emb.json"));
+    const ctx = { window: {} }; vm.runInNewContext(read("data/photo-labels.js"), ctx);
+    const L = ctx.window.PHOTO_LABELS;
+    const okKeys = L.every(([k]) => k.startsWith("d:") ? DISHES.some((d) => d[0] === k.slice(2)) : k.startsWith("f:") && F.has(k.slice(2)));
+    check("写真の候補：説明文の品が全部成分表か料理にあり、埋め込みが同じ順・同じ数・長さ1", okKeys && emb.keys.length === L.length && emb.keys.every((k, i) => k === L[i][0]) && emb.vectors.every((v) => v.length === emb.dim && Math.abs(Math.hypot(...v) - 1) < 0.01), `${emb.keys.length}/${L.length}`);
+    check("写真の AI：部品がそろい、モデルのライセンス（Apple）と transformers.js のライセンスを一緒に置く", ["models/Xenova/mobileclip_s0/onnx/vision_model_fp16.onnx", "models/Xenova/mobileclip_s0/config.json", "models/Xenova/mobileclip_s0/preprocessor_config.json", "vendor/transformers.min.js", "vendor/ort-wasm-simd-threaded.jsep.mjs", "vendor/ort-wasm-simd-threaded.jsep.wasm"].every((f) => existsSync(path.join(root, f))) && /Apple/.test(read("models/Xenova/mobileclip_s0/LICENSE")) && existsSync(path.join(root, "vendor/LICENSE-transformers.txt")));
+  }
 }
 {
   const sw = read("sw.js");
@@ -68,7 +77,7 @@ check("食事摂取基準：見本の数が2025年版と同じ（30〜49歳女�
 }
 
 // ---- 2. ブラウザで ----
-const types = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png", ".css": "text/css" };
+const types = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png", ".css": "text/css", ".mjs": "text/javascript", ".wasm": "application/wasm" };
 const server = createServer((req, res) => {
   let p = decodeURIComponent(new URL(req.url, "http://x").pathname);
   if (p.endsWith("/")) p += "index.html";
@@ -107,6 +116,7 @@ try {
   await page.check("input[name=menses]");
   await page.click("#profile button[type=submit]");
   check("設定すると「きょう」に移り、目安が 2,050kcal（35歳女性・ふつう）", await page.isVisible("#v-today") && /2,050kcal/.test(await page.textContent("#summary")));
+  check("はじめての案内（3つの手順）が出て、「わかった」で消え、開き直しても出ない", await page.isVisible("#firsthelp") && (await page.locator("#firsthelp li").count()) === 3 && await (async () => { await page.click("#firstok"); await page.reload(); return page.isHidden("#firsthelp"); })());
   check("記録が無いときのひとことが出る", /まずは1食/.test(await page.textContent("#advice")));
 
   // よく食べるものから、朝にごはん
@@ -204,7 +214,31 @@ try {
   await page.fill("#photocode", "ごめんなさい、読み取れませんでした");
   check("写真から：形がちがう答えは記録せず、わけを出す", /見つかりません/.test(await page.textContent("#photoprev")) && await page.isHidden("#photook"));
   await page.click("#addclose");
+  // 写真から探す（端末の中の AI）。作った絵（黄色い弓なり）を読ませ、候補が出て記録できるかを見る（当たるかは Actions「Photo model」の見本の写真で見る）
+  {
+    const r = await page.evaluate(() => window.TABETA.rankByEmbedding([1, 0], { keys: ["f:07107", "f:07107", "f:01088"], vectors: [[0.2, 0.9], [0.9, 0.1], [0.5, 0.5]] }, 6));
+    check("写真の候補：同じ品は高いほう1つにまとめ、近い順に並べる", r.length === 2 && r[0][0] === "f:07107" && Math.abs(r[0][1] - 0.9) < 1e-9 && r[1][0] === "f:01088", JSON.stringify(r));
+    const png = Buffer.from(await page.evaluate(() => { const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, 256, 256); g.strokeStyle = "#f2d22e"; g.lineWidth = 40; g.beginPath(); g.arc(128, 40, 120, 0.6, 2.5); g.stroke(); return c.toDataURL("image/png").split(",")[1]; }), "base64");
+    await page.click('.meal[data-meal=s] button.add');
+    const t0 = Date.now();
+    await page.setInputFiles("#aifile", { name: "test.png", mimeType: "image/png", buffer: png });
+    await page.waitForFunction(() => document.querySelectorAll("#aiprev li").length > 0 || /動かせません/.test(document.querySelector("#aistat").textContent), null, { timeout: 180000 });
+    check("写真から（端末の AI）：候補が6つ出て、1つ目にチェックが入る", (await page.locator("#aiprev li").count()) === 6 && await page.isChecked("#aiprev li:first-child input[type=checkbox]") && await page.isVisible("#aiimg"), `${await page.textContent("#aistat")} ${Date.now() - t0}ms`);
+    const first = (await page.textContent("#aiprev li:first-child b")).trim();
+    await page.click("#aiok");
+    check("写真から（端末の AI）：チェックした品が間食に入る", (await page.textContent('.meal[data-meal=s]')).includes(first), first);
+  }
   await page.click("#todaybtn");
+  // 前と同じ：前の日の夕食（写真から入れた2品）を、きょうの夕食に1回で入れる
+  check("前と同じ：きょうの夕食が空なら「前の日の夕食と同じ」が出る", /前の日の/.test(await page.textContent('.meal[data-meal=d] button.copy')));
+  await page.click('.meal[data-meal=d] button.copy');
+  check("前と同じ：押すと前の日の2品が入り、ボタンが消える", (await page.locator('.meal[data-meal=d] li').count()) === 2 && (await page.locator('.meal[data-meal=d] button.copy').count()) === 0);
+  // 量を直す：ごはん 150g → 200g（156kcal/100g → 312kcal）
+  await page.click('.meal[data-meal=b] li:first-child button.edit');
+  check("量を直す：品をおすと、今の量（150g）で開く", (await page.inputValue("#amt")) === "150" && /直す/.test(await page.textContent("#addok")));
+  await page.fill("#amt", "200");
+  await page.click("#addok");
+  check("量を直す：200g に変わり、品の数は増えない（312kcal）", /312kcal/.test(await page.textContent('.meal[data-meal=b] li:first-child')) && (await page.locator('.meal[data-meal=b] li').count()) === 2, await page.textContent('.meal[data-meal=b]'));
 
   // 1週間
   await page.click('nav.tabs button[data-view=week]');
@@ -214,7 +248,7 @@ try {
   await page.click('nav.tabs button[data-view=settings]');
   const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#export")]);
   const saved = JSON.parse(readFileSync(await dl.path(), "utf8"));
-  check("書き出したファイルに記録が入っている", saved.days["2026-11-22"]?.length === 3 && saved.profile?.age === 35);
+  check("書き出したファイルに記録が入っている", saved.days["2026-11-22"]?.length === 5 && saved.profile?.age === 35);
   await page.click('nav.tabs button[data-view=settings]');
 
   // 減量
@@ -242,6 +276,16 @@ try {
   await page.click("#wtsave");
   await page.click("#todaybtn");
   check("体重の変化が出る（前の日 60.5kg → きょう 59.5kg で −1.0kg）", /−1\.0kg/.test(await page.textContent("#dietline")), await page.textContent("#dietline"));
+
+  await page.click('nav.tabs button[data-view=week]');
+  check("体重のグラフ：2日分の点と7日平均の線が出る", (await page.locator("#wchart circle").count()) === 2 && (await page.locator("#wchart path.avg").count()) === 1 && /−1\.0kg/.test(await page.textContent("#wchart")), await page.textContent("#wchart"));
+  await page.click('nav.tabs button[data-view=settings]');
+  await page.click("[data-a11y-open]");
+  check("見やすさの設定：設定の画面から開ける（文字・色・動き・読み上げ）", await page.isVisible(".a11y-dlg") && /読みやすい文字/.test(await page.textContent(".a11y-dlg")));
+  await page.keyboard.press("Escape");
+  const fb = await page.getAttribute("#feedback", "href");
+  check("感想のフォーム：アプリの名前だけを入れて開く（記録の中身を URL に入れない）", /^https:\/\/docs\.google\.com\/forms\//.test(fb) && /entry\.443796210=/.test(fb) && !/kcal|tabeta-memo:v1|\d{4}-\d\d-\d\d/.test(fb), fb);
+  await page.click('nav.tabs button[data-view=today]');
 
   // 運動（体重 59.5kg・ジョギング 30分：(7.0−1) × 0.5時間 × 59.5kg = 179kcal を目安に足す）
   await page.click("#movecard summary");
