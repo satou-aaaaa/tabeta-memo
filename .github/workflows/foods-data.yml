@@ -1,0 +1,64 @@
+name: Foods data
+run-name: "Foods data"
+
+# 食品の栄養値（data/foods.json）を、文部科学省の公式 Excel から作り直す（Claude は使わない）。
+# クラウドのセッションから文科省のサイトに届かないため、Actions で取ってくる。手で起こす（workflow_dispatch）。
+# 作ったものは枝 foods-data に置く。中身を確かめてから PR で main に入れる。
+# 読むのは www.mext.go.jp の増補2023年のページと、そこから張られた「第2章（データ）」の Excel だけ。robots.txt を守り、名乗る。
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      PAGE: https://www.mext.go.jp/a_menu/syokuhinseibun/mext_00001.html
+      USER_AGENT: "satou-aaaaa-tabeta-memo/1.0 (+https://github.com/satou-aaaaa/tabeta-memo)"
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: 公式の Excel を取る
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re, sys, urllib.request, urllib.robotparser, urllib.parse
+          ua = os.environ["USER_AGENT"]; page = os.environ["PAGE"]
+          rp = urllib.robotparser.RobotFileParser("https://www.mext.go.jp/robots.txt"); rp.read()
+          if not rp.can_fetch(ua, page): sys.exit("::error::robots.txt が許していない")
+          get = lambda u: urllib.request.urlopen(urllib.request.Request(u, headers={"User-Agent": ua}), timeout=60).read()
+          html = get(page).decode("utf-8", "replace")
+          links = re.findall(r'<a[^>]+href="([^"]+\.xlsx)"[^>]*>(.*?)</a>', html, re.S)
+          for h, t in links: print(h, re.sub(r"<[^>]+>|\s+", " ", t).strip())
+          main = [h for h, t in links if "第2章（データ）" in re.sub(r"<[^>]+>", "", t)]
+          if not main: sys.exit("::error::「第2章（データ）」の Excel が見つからない")
+          url = urllib.parse.urljoin(page, main[0])
+          if urllib.parse.urlsplit(url).hostname != "www.mext.go.jp": sys.exit("::error::文科省の外の URL")
+          print("本表:", url)
+          open("honpyo.xlsx", "wb").write(get(url))
+          with open(os.environ["GITHUB_ENV"], "a") as f: f.write(f"SRC_URL={url}\n")
+          PY
+      - name: data/foods.json を作る
+        run: |
+          set -euo pipefail
+          pip install --quiet openpyxl==3.1.5
+          mkdir -p data
+          python3 tools/build_foods.py honpyo.xlsx data/foods.json
+          ls -la data/foods.json
+      - name: 枝 foods-data に置く
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B foods-data
+          git add data/foods.json
+          git commit -m "食品の栄養値を文科省の成分表（$SRC_URL）から作り直す"
+          git push -f origin foods-data
