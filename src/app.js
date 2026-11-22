@@ -68,6 +68,7 @@
     if (t === "f") addFood(ref, e.amt);
     else if (t === "d") { const d = DISHES.find((x) => x.name === ref); if (d) for (const [id, g] of d.parts) addFood(id, g * e.amt); }
     else if (t === "c") { const c = S.custom.find((x) => x.id === ref); if (c) for (const k of NKEYS) out[k] += (c.n[k] || 0) * e.amt; }
+    else if (t === "x" && e.n) for (const k of NKEYS) out[k] += e.n[k] || 0;   // 写真から：成分表に当たらなかった品（Claude の見積もり）
     return out;
   }
   const splitKey = (key) => { const i = key.indexOf(":"); return [key.slice(0, i), key.slice(i + 1)]; };
@@ -81,6 +82,7 @@
   function amtText(e) {
     const [t] = splitKey(e.key);
     if (t === "f") return `${fmt(e.amt, 0)}g`;
+    if (t === "x") return e.g ? `${fmt(e.g)}g（見積もり）` : "見積もり";
     const d = t === "d" ? DISHES.find((x) => x.name === splitKey(e.key)[1]) : S.custom.find((x) => x.id === splitKey(e.key)[1]);
     const unit = d ? d.unit : "1食";
     return e.amt === 1 ? unit : `${unit}×${fmt(e.amt, 2)}`;
@@ -413,6 +415,7 @@
     addMeal = meal; picked = null;
     $("#addmeal").value = meal;
     $("#q").value = "";
+    $("#photobox").hidden = true; $("#photocode").value = ""; $("#photoprev").innerHTML = ""; $("#photook").hidden = true;
     $("#pick").hidden = true; $("#results").hidden = false; $("#customform").hidden = true;
     $("#adddlg").showModal ? $("#adddlg").showModal() : $("#adddlg").setAttribute("open", "");
     showList();
@@ -518,6 +521,60 @@
     $("#customform").hidden = true;
   }
 
+  // ---- 写真から（Claude に写真を送り、返ってきた「たべたメモ:」の1行を貼る） ----
+  const PHOTO_PROMPT = "この写真の食事を品目ごとに分けて、日本食品標準成分表の食品名に近い言い方（例：ごはん、納豆、鶏のから揚げ、キャベツ）で、食べた量の重さ（g）を見積もってください。それぞれのエネルギー（kcal）・たんぱく質・脂質・炭水化物・食塩相当量（g）の見積もりも付けて、答えは次の形の1行だけにしてください。\nたべたメモ:[{\"name\":\"ごはん\",\"g\":150,\"kcal\":234,\"p\":3.8,\"f\":0.5,\"c\":55.7,\"salt\":0}]";
+  function parsePhotoCode(text) {
+    const i = text.indexOf("たべたメモ:");
+    if (i < 0) return null;
+    const rest = text.slice(i + 6).trim();
+    const end = rest.lastIndexOf("]");
+    if (!rest.startsWith("[") || end < 0) return null;
+    let arr;
+    try { arr = JSON.parse(rest.slice(0, end + 1)); } catch (e) { return null; }
+    if (!Array.isArray(arr)) return null;
+    return arr.filter((x) => x && typeof x.name === "string" && x.name.trim()).slice(0, 20).map((x) => {
+      const g = Math.max(0, Math.min(2000, Number(x.g) || 0));
+      const hit = search(x.name.trim()).find((it) => it.key.startsWith("f:") || it.key.startsWith("d:"));
+      const num = (v) => Math.max(0, Math.min(5000, Number(v) || 0));
+      const est = { kcal: num(x.kcal), prot: num(x.p), fat: num(x.f), carb: num(x.c), salt: num(x.salt) };
+      return { name: x.name.trim().slice(0, 40), g, hit, est };
+    });
+  }
+  let photoItems = [];
+  function showPhotoPreview() {
+    const items = parsePhotoCode($("#photocode").value);
+    photoItems = items || [];
+    if (!items) { $("#photoprev").innerHTML = `<li class="empty">「たべたメモ:」で始まる1行が見つかりません。Claude の答えをそのまま全部貼ってください。</li>`; $("#photook").hidden = true; return; }
+    $("#photoprev").innerHTML = items.map((it, i) => {
+      const isDish = it.hit && it.hit.key.startsWith("d:");
+      const amt = isDish ? 1 : it.g || (it.hit && it.hit.g) || 100;
+      const n = it.hit ? nutOf({ key: it.hit.key, amt }) : it.est;
+      return `<li><label><input type="checkbox" data-i="${i}" checked> <b>${esc(it.name)}</b></label>
+        <span>${it.hit ? `→ ${esc(it.hit.name)}（成分表）` : "→ 成分表に無いので Claude の見積もり"}</span>
+        <span>${isDish ? `<input type="hidden" data-g="${i}" value="1">1人前` : `<input type="number" inputmode="decimal" min="1" max="2000" data-g="${i}" value="${Math.round(amt)}" aria-label="${esc(it.name)}の量（g）"> g`}・${fmt(n.kcal)}kcal</span></li>`;
+    }).join("") || `<li class="empty">品目がありませんでした。</li>`;
+    $("#photook").hidden = !items.length;
+  }
+  function commitPhoto() {
+    const meal = $("#addmeal").value, list = (S.days[day] = S.days[day] || []);
+    let n = 0;
+    photoItems.forEach((it, i) => {
+      if (!$(`#photoprev input[data-i="${i}"]`).checked) return;
+      const amt = Number($(`#photoprev input[data-g="${i}"]`).value) || 0;
+      if (!(amt > 0)) return;
+      if (it.hit) list.push({ key: it.hit.key, amt, meal, label: it.name });
+      else {
+        const r = it.g ? amt / it.g : 1;
+        const est = Object.fromEntries(NKEYS.map((k) => [k, 0]));
+        for (const k of ["kcal", "prot", "fat", "carb", "salt"]) est[k] = it.est[k] * r;
+        list.push({ key: "x:photo", amt: 1, g: amt, n: est, meal, label: it.name });
+      }
+      n++;
+    });
+    if (!n) return;
+    save(); closeAdd(); render(); toast(`写真から ${n} 品を記録しました。量がちがうものは消して入れ直せます`);
+  }
+
   let toastT;
   function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 2200); }
 
@@ -566,6 +623,10 @@
     $("#addok").onclick = commitPick;
     $("#back").onclick = () => { $("#pick").hidden = true; $("#results").hidden = false; };
     $("#addclose").onclick = closeAdd;
+    $("#openphoto").onclick = () => { $("#photobox").hidden = !$("#photobox").hidden; $("#photoprompt").value = PHOTO_PROMPT; };
+    $("#photocopy").onclick = async () => { try { await navigator.clipboard.writeText(PHOTO_PROMPT); toast("コピーしました。Claude に写真といっしょに送ってください"); } catch (e) { $("#photoprompt").select(); toast("下の文を長押ししてコピーしてください"); } };
+    $("#photocode").addEventListener("input", showPhotoPreview);
+    $("#photook").onclick = commitPhoto;
     $("#opencustom").onclick = () => { $("#customform").hidden = false; $("#customform").cname.value = $("#q").value.trim(); $("#customform").cname.focus(); };
     $("#customform").addEventListener("submit", commitCustom);
     const pf = $("#profile");

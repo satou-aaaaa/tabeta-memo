@@ -190,6 +190,20 @@ try {
   check("前の日（すぎた日）は朝のおすすめが出る", /朝ごはんのおすすめ/.test(await page.textContent("#suggesthead")));
   await page.click("#suggestlist li:first-child button.usemenu");
   check("おすすめの献立をボタン1つで記録できる（朝に4品）", (await page.locator('.meal[data-meal=b] li').count()) >= 3);
+  // 写真から（Claude の答えを貼る）
+  await page.click('.meal[data-meal=d] button.add');
+  await page.click("#openphoto");
+  check("写真から：Claude に送る文が出て、答えの形（たべたメモ:）を書いてある", /たべたメモ:\[/.test(await page.inputValue("#photoprompt")));
+  await page.fill("#photocode", "はい、見積もりです。\nたべたメモ:[{\"name\":\"ごはん\",\"g\":180,\"kcal\":281,\"p\":4.5,\"f\":0.5,\"c\":66,\"salt\":0},{\"name\":\"なぞのソース\",\"g\":30,\"kcal\":60,\"p\":0,\"f\":5,\"c\":3,\"salt\":0.8}]");
+  check("写真から：ごはんは成分表に当て、無いものは見積もりを使う", (await page.locator("#photoprev li").count()) === 2 && /成分表/.test(await page.textContent("#photoprev li:nth-child(1)")) && /見積もり/.test(await page.textContent("#photoprev li:nth-child(2)")), await page.textContent("#photoprev"));
+  await page.click("#photook");
+  const dn = await page.textContent('.meal[data-meal=d]');
+  check("写真から：2品が夜に入る（ごはん 180g＝281kcal・なぞのソース 60kcal）", /ごはん[\s\S]*281kcal/.test(dn) && /なぞのソース[\s\S]*60kcal/.test(dn), dn);
+  await page.click('.meal[data-meal=d] button.add');
+  await page.click("#openphoto");
+  await page.fill("#photocode", "ごめんなさい、読み取れませんでした");
+  check("写真から：形がちがう答えは記録せず、わけを出す", /見つかりません/.test(await page.textContent("#photoprev")) && await page.isHidden("#photook"));
+  await page.click("#addclose");
   await page.click("#todaybtn");
 
   // 1週間
