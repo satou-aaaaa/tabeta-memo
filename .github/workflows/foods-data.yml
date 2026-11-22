@@ -7,6 +7,10 @@ run-name: "Foods data"
 # 読むのは www.mext.go.jp の増補2023年のページと、そこから張られた「第2章（データ）」の Excel だけ。robots.txt を守り、名乗る。
 on:
   workflow_dispatch:
+  # 作り方（変換のスクリプトかこのファイル）を直した PR の枝でも回す（main に入る前に変換を確かめるため）
+  push:
+    branches-ignore: [main, foods-data]
+    paths: [tools/build_foods.py, .github/workflows/foods-data.yml]
 
 permissions: {}
 
