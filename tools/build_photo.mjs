@@ -11,21 +11,34 @@ const root = process.argv[2] || ".";
 const MODEL = "Xenova/mobileclip_s0";
 const UA = "satou-aaaaa-tabeta-memo/1.0 (+https://github.com/satou-aaaaa/tabeta-memo)";
 
-// --try：Wikimedia Commons の見本の写真で、ブラウザと同じ画像のモデル（量子化）と埋め込みを使って上位5つを出す（ログで見るだけ）
+// --try：Wikimedia Commons で見本の写真を探し、画像のモデルの型（fp32・q8・uint8・fp16）ごとに上位3つを出す（ログで見るだけ。どの型がよいか決めるため）
 if (process.argv.includes("--try")) {
   const emb = JSON.parse(readFileSync(path.join(root, "data/photo-emb.json"), "utf8"));
   const proc = await AutoProcessor.from_pretrained(MODEL);
-  const vis = await CLIPVisionModelWithProjection.from_pretrained(MODEL, { dtype: "q8" });
-  for (const u of ["https://upload.wikimedia.org/wikipedia/commons/8/8a/Banana-Single.jpg", "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Natto_on_rice.jpg/640px-Natto_on_rice.jpg", "https://upload.wikimedia.org/wikipedia/commons/thumb/6/60/Japanese_curry_rice.jpg/640px-Japanese_curry_rice.jpg"]) {
+  const QS = ["banana fruit", "natto rice", "Japanese curry rice", "miso soup", "onigiri", "karaage", "ramen", "gyoza", "tonkatsu", "salmon grilled", "oyakodon", "spaghetti bolognese", "strawberry shortcake", "melonpan", "edamame", "boiled egg"];
+  const imgs = [];
+  for (const q of QS) {
     try {
+      const api = "https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search&gsrnamespace=6&gsrlimit=1&gsrsearch=" + encodeURIComponent(q + " filetype:bitmap") + "&prop=imageinfo&iiprop=url&iiurlwidth=512";
+      const j = await (await fetch(api, { headers: { "User-Agent": UA } })).json();
+      const pg = Object.values(j.query.pages)[0];
+      const u = pg.imageinfo[0].thumburl;
       const r = await fetch(u, { headers: { "User-Agent": UA } });
-      if (!r.ok) { console.log(u, "HTTP", r.status); continue; }
-      const img = await RawImage.fromBlob(await r.blob());
+      if (!r.ok) { console.log(q, "HTTP", r.status); continue; }
+      imgs.push([q, pg.title, await RawImage.fromBlob(await r.blob())]);
+      await new Promise((ok) => setTimeout(ok, 500));
+    } catch (e) { console.log(q, String(e)); }
+  }
+  for (const dtype of ["fp32", "q8", "uint8", "fp16"]) {
+    let vis;
+    try { vis = await CLIPVisionModelWithProjection.from_pretrained(MODEL, { dtype }); } catch (e) { console.log(dtype, "読めない", String(e).slice(0, 80)); continue; }
+    console.log("== 型", dtype);
+    for (const [q, title, img] of imgs) {
       const { image_embeds } = await vis(await proc(img));
       const v = image_embeds.normalize(2, -1).data;
-      const sc = emb.vectors.map((t, i) => [emb.keys[i], t.reduce((a, x, j) => a + x * v[j], 0)]).sort((a, b) => b[1] - a[1]).slice(0, 5);
-      console.log(u.split("/").pop(), sc.map(([k, s]) => k + " " + s.toFixed(3)).join(" / "));
-    } catch (e) { console.log(u, String(e)); }
+      const sc = emb.vectors.map((t, i) => [emb.keys[i], t.reduce((a, x, j) => a + x * v[j], 0)]).sort((a, b) => b[1] - a[1]).slice(0, 3);
+      console.log("TRY", dtype, q, "|", title.slice(5, 45), "|", sc.map(([k, s]) => k + " " + s.toFixed(3)).join(" / "));
+    }
   }
   process.exit(0);
 }
