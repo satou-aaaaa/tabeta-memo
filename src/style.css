@@ -136,3 +136,14 @@ select { max-width: 100%; }
 form .row.col select { width: 100%; }
 form .row { max-width: 100%; }
 [hidden] { display: none !important; }
+.moves summary { cursor: pointer; list-style: none; display: flex; flex-direction: column; }
+.moves summary::-webkit-details-marker { display: none; }
+.moves summary h2::after { content: " ▾"; color: var(--sub); font-weight: normal; }
+.moves[open] summary h2::after { content: " ▴"; }
+.moves select { flex: 1 1 200px; }
+.moves #movemin, .moves #steps { width: 6em; }
+.movelist { list-style: none; padding: 0; margin: 4px 0; }
+.movelist li { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding: 4px 0; }
+.movelist .fn { flex: 1; }
+.movelist .fa { color: var(--sub); font-size: .85rem; }
+.movelist button { width: 40px; min-height: 40px; padding: 0; border-color: transparent; color: var(--sub); }

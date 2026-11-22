@@ -14,5 +14,5 @@ jobs:
       - run: |
           set -euo pipefail
           sudo apt-get install -y -qq poppler-utils >/dev/null
-          curl -sS -A "satou-aaaaa-tabeta-memo/1.0 (+https://github.com/satou-aaaaa/tabeta-memo)" -o mets.pdf https://kennet.mhlw.go.jp/tools/pdf/mets.pdf
+          curl -sSL -w "HTTP %{http_code} %{url_effective}\n" -A "satou-aaaaa-tabeta-memo/1.0 (+https://github.com/satou-aaaaa/tabeta-memo)" -o mets.pdf https://kennet.mhlw.go.jp/tools/pdf/mets.pdf
           pdftotext -layout mets.pdf - | sed 's/^/| /'

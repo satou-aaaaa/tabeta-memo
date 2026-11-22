@@ -29,6 +29,14 @@
     <div class="card" id="summary"></div>
     <p id="dietline" class="dietline" hidden></p>
     <div class="weightrow"><label>この日の体重 <input id="wt" type="number" inputmode="decimal" min="25" max="300" step="0.1"> kg</label><button id="wtsave">記録</button></div>
+    <details class="card moves" id="movecard">
+      <summary><h2>運動・歩数</h2><span id="movetotal" class="hint"></span></summary>
+      <div class="weightrow"><label>歩数 <input id="steps" type="number" inputmode="numeric" min="0" max="100000" step="1"> 歩</label><button id="stepssave">記録</button></div>
+      <p id="stepsinfo" class="hint"></p>
+      <p class="hint">ふだんの歩きは設定の「体の動かし方」にふくまれているので、歩数は目安に足しません。意識して歩いた・運動した分を下で入れると、その分を目安に足します。</p>
+      <div class="weightrow"><select id="movetype" aria-label="運動の種類"></select><label><input id="movemin" type="number" inputmode="numeric" min="1" max="600" step="1" aria-label="運動した時間（分）"> 分</label><button id="moveadd">足す</button></div>
+      <ul id="movelist" class="movelist"></ul>
+    </details>
     <div id="meals"></div>
     <div class="card" id="suggest" hidden>
       <h2 id="suggesthead">次の食事のおすすめ</h2>
@@ -173,6 +181,7 @@
 <script src="data/dri.js"></script>
 <script src="data/common.js"></script>
 <script src="data/menus.js"></script>
+<script src="data/exercise.js"></script>
 <script src="src/app.js"></script>
 </body>
 </html>
