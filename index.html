@@ -38,25 +38,7 @@
     </div>
     <div class="card" id="summary"></div>
     <p id="dietline" class="dietline" hidden></p>
-    <div class="weightrow card wcard"><span class="mi" aria-hidden="true">⚖️</span><label>体重 <input id="wt" type="number" inputmode="decimal" min="25" max="300" step="0.1"> kg</label><button id="wtsave">記録</button></div>
-    <details class="card moves" id="movecard">
-      <summary><h2>運動・歩数</h2><span id="movetotal" class="hint"></span></summary>
-      <div class="weightrow"><label>歩数 <input id="steps" type="number" inputmode="numeric" min="0" max="100000" step="1"> 歩</label><button id="stepssave">記録</button></div>
-      <p id="stepsinfo" class="hint"></p>
-      <p class="hint">ふだんの歩きは設定の「体の動かし方」にふくまれているので、歩数は目安に足しません。意識して歩いた・運動した分を下で入れると、その分を目安に足します。</p>
-      <div class="weightrow"><select id="movetype" aria-label="運動の種類"></select><label><input id="movemin" type="number" inputmode="numeric" min="1" max="600" step="1" aria-label="運動した時間（分）"> 分</label><button id="moveadd">足す</button></div>
-      <ul id="movelist" class="movelist"></ul>
-    </details>
     <div id="meals"></div>
-    <div class="card" id="suggest" hidden>
-      <h2 id="suggesthead">次の食事のおすすめ</h2>
-      <ul id="suggestlist" class="menus"></ul>
-      <h3>コンビニで買うなら</h3>
-      <ul id="shoplist" class="menus"></ul>
-      <p class="hint">コンビニの組み合わせは商品の種類での目安です。商品ごとに量や栄養はちがうので、袋の栄養成分表示があれば「成分表に無いものを足す」で入れると正確です。</p>
-      <button id="findshops" class="ghost">近くのコンビニ・スーパーを探す（位置を使う）</button>
-      <ul id="shops" class="shops"></ul>
-    </div>
     <div class="card">
       <h2>ひとこと</h2>
       <ul id="advice" class="advice"></ul>
@@ -66,6 +48,25 @@
       <h2>栄養のようす <small id="metcount"></small></h2>
       <div id="nuts"></div>
     </div>
+    <details class="card fold" id="suggest" hidden>
+      <summary><h2 id="suggesthead">次の食事のおすすめ</h2></summary>
+      <ul id="suggestlist" class="menus"></ul>
+      <h3>コンビニで買うなら</h3>
+      <ul id="shoplist" class="menus"></ul>
+      <p class="hint">コンビニの組み合わせは商品の種類での目安です。商品ごとに量や栄養はちがうので、袋の栄養成分表示があれば「成分表に無いものを足す」で入れると正確です。</p>
+      <button id="findshops" class="ghost">近くのコンビニ・スーパーを探す（位置を使う）</button>
+      <ul id="shops" class="shops"></ul>
+    </details>
+    <h2 class="sec">体重・運動</h2>
+    <div class="weightrow card wcard"><span class="mi" aria-hidden="true">⚖️</span><label>体重 <input id="wt" type="number" inputmode="decimal" min="25" max="300" step="0.1"> kg</label><button id="wtsave">記録</button></div>
+    <details class="card moves" id="movecard">
+      <summary><h2>運動・歩数</h2><span id="movetotal" class="hint"></span></summary>
+      <div class="weightrow"><label>歩数 <input id="steps" type="number" inputmode="numeric" min="0" max="100000" step="1"> 歩</label><button id="stepssave">記録</button></div>
+      <p id="stepsinfo" class="hint"></p>
+      <p class="hint">ふだんの歩きは設定の「体の動かし方」にふくまれているので、歩数は目安に足しません。意識して歩いた・運動した分を下で入れると、その分を目安に足します。</p>
+      <div class="weightrow"><select id="movetype" aria-label="運動の種類"></select><label><input id="movemin" type="number" inputmode="numeric" min="1" max="600" step="1" aria-label="運動した時間（分）"> 分</label><button id="moveadd">足す</button></div>
+      <ul id="movelist" class="movelist"></ul>
+    </details>
   </section>
 
   <section id="v-week" hidden>
