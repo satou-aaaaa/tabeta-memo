@@ -263,7 +263,7 @@
         ${ring(tot.kcal, E)}
         <dl class="kcalsum">
           <div><dt>食べた</dt><dd><span id="kcal">${fmt(tot.kcal)}</span>kcal</dd></div>
-          <div><dt>目安</dt><dd>${fmt(E)}kcal</dd></div>
+          <div><dt>${T._diet && !T._diet.blocked ? "減量の目安" : "目安"}</dt><dd>${fmt(E)}kcal</dd></div>
           ${T._extra ? `<div><dt>うち運動</dt><dd>＋${fmt(T._extra)}kcal</dd></div>` : ""}
         </dl>
       </div>
@@ -315,7 +315,7 @@
       else if (d.blocked === "low") html = "BMI が 18.5 未満（低体重）なので、減量の目標は出しません。体重を保つ目安を出しています。";
       else if (d.blocked === "pace") html = "「早め」は BMI 25 以上の人向けです。設定で「ふつう」か「ゆっくり」を選んでください。いまは体重を保つ目安です。";
       else {
-        html = `減量中：${esc(d.pace.label)}（目標 ${fmt(d.goalW, 1)}kg）。体重を保つ目安 ${fmt(T._keep)}kcal から 1日 ${fmt(d.cut)}kcal 減らした ${fmt(T._E - T._extra)}kcal を目標にしています。${T._extra ? `運動の ${fmt(T._extra)}kcal を足して、きょうは ${fmt(T._E)}kcal です。` : ""}`;
+        html = `<b>減量の目安：1日 ${fmt(T._E - T._extra)}kcal</b>（${esc(d.pace.label)}・目標 ${fmt(d.goalW, 1)}kg）。体重を保つ量 ${fmt(T._keep)}kcal より ${fmt(d.cut)}kcal 少なくしています。${T._extra ? `運動の ${fmt(T._extra)}kcal を足して、きょうは ${fmt(T._E)}kcal です。` : ""}`;
         if (d.floored) html += "基礎代謝より下げないよう、減らす量をおさえています。";
         const ds = Object.keys(S.weights).sort();
         if (ds.length >= 2) { const diff = S.weights[ds[ds.length - 1]] - S.weights[ds[0]]; html += ` 記録の最初から ${diff <= 0 ? "−" : "＋"}${Math.abs(diff).toFixed(1)}kg。`; }
@@ -437,7 +437,7 @@
 
   function renderSettings(first) {
     const p = S.profile || { sex: "f", age: 30, act: "1", menses: true };
-    $("#firstnote").hidden = !first;
+    $("#firstnote").hidden = !first; $("#saved").textContent = "";
     const f = $("#profile");
     f.sex.value = p.sex; f.age.value = p.age; f.act.value = p.act; f.menses.checked = !!p.menses;
     f.height.value = p.height || ""; f.weight.value = p.weight || ""; f.goal.value = p.goal || "keep"; f.pace.value = p.pace || "std";
@@ -451,6 +451,11 @@
     const bmi = bmiOf(Number(f.weight.value), Number(f.height.value));
     $("#bmiinfo").textContent = bmi ? `BMI ${fmt(bmi, 1)}（18.5 未満は低体重、25 以上は肥満の目安：日本肥満学会）` : "";
     $("#losewarn").hidden = !(f.goal.value === "lose" && bmi && bmi < window.DIET.minBmi);
+    // 「早め」は BMI 25 以上の人だけ。選べないときは選べなくし、選んでいたら知らせる（だまって体重を保つ目安にしない）
+    const fast = window.DIET.paces.find((x) => x.id === "fast");
+    const fastNg = !!(fast && fast.minBmi && bmi && bmi < fast.minBmi);
+    f.pace.querySelector('option[value="fast"]').disabled = fastNg;
+    $("#pacewarn").hidden = !(f.goal.value === "lose" && fastNg && f.pace.value === "fast");
   }
 
   function renderAbout() {
@@ -766,23 +771,33 @@
     $("#customform").addEventListener("submit", commitCustom);
     const pf = $("#profile");
     pf.addEventListener("input", syncMenses);
-    pf.addEventListener("submit", (e) => {
-      e.preventDefault();
+    // 設定は変えたらすぐ使う（「目安を出す」を押さずにほかの画面へ移ると、減量を選んでも前の目安のままだった。2026-11-23 satou さん）
+    const applyProfile = (go) => {
       const age = Math.floor(Number(pf.age.value));
       if (!(age >= 18 && age <= 120)) { $("#ageerr").hidden = false; pf.age.focus(); return; }
       $("#ageerr").hidden = true;
       const height = Number(pf.height.value) || null, weight = Number(pf.weight.value) || null;
+      // 範囲の外の値をだまって捨てない（身長を m で入れた・体重を g で入れたなど。捨てると減量の目標が出なくなる）
+      const hBad = height != null && !(height >= 100 && height <= 230), wBad = weight != null && !(weight >= 25 && weight <= 300);
+      $("#hwerr").hidden = !(hBad || wBad);
+      if (hBad) { pf.height.focus(); return; }
+      if (wBad) { pf.weight.focus(); return; }
       if (pf.goal.value === "lose" && !(height && weight)) { $("#needhw").hidden = false; pf.height.focus(); return; }
       $("#needhw").hidden = true;
+      if (pf.goal.value === "lose" && !$("#pacewarn").hidden) { pf.pace.focus(); return; }
       S.profile = { sex: pf.sex.value, age, act: pf.act.value, menses: pf.sex.value === "f" && age < 65 && pf.menses.checked,
         height: height && height >= 100 && height <= 230 ? height : null, weight: weight && weight >= 25 && weight <= 300 ? weight : null,
         goal: pf.goal.value, pace: pf.pace.value };
-      if (S.profile.weight && !S.weights[ymd(new Date())]) S.weights[ymd(new Date())] = S.profile.weight;
+      // 設定で入れた体重は、きょうの体重として記録する（前に入れた古い体重のままで目安を出さない）
+      if (S.profile.weight) S.weights[ymd(new Date())] = S.profile.weight;
       save();
       const T = targets(S.profile, weightNow());
-      toast(`1日の目安を ${fmt(T._E)}kcal にしました`);
+      if (!go) { $("#saved").textContent = `保存しました：1日の目安 ${fmt(T._E)}kcal${T._diet && !T._diet.blocked ? "（減量）" : ""}`; return; }
+      toast(T._diet && !T._diet.blocked ? `減量の目安を 1日 ${fmt(T._E)}kcal にしました（体重を保つ量より ${fmt(T._diet.cut)}kcal 少なく）` : `1日の目安を ${fmt(T._E)}kcal にしました`);
       view = "today"; render();
-    });
+    };
+    pf.addEventListener("submit", (e) => { e.preventDefault(); applyProfile(true); });
+    pf.addEventListener("change", () => { if (S.profile) applyProfile(false); });
     $("#export").onclick = exportData;
     $("#moveadd").onclick = () => {
       const min = Number($("#movemin").value);

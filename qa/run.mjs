@@ -256,9 +256,17 @@ try {
   await page.fill("input[name=weight]", "60");
   await page.selectOption("select[name=goal]", "lose");
   check("減量を選ぶと減らし方が出る・BMI が出る", await page.isVisible("#paceRow") && /BMI 23\.4/.test(await page.textContent("#bmiinfo")));
-  await page.selectOption("select[name=pace]", "std");
+  check("減量：BMI 25 未満では「早め」を選べない", await page.isDisabled('select[name=pace] option[value=fast]'));
+  await page.fill("input[name=height]", "1.6");
   await page.click("#profile button[type=submit]");
+  check("身長を m で入れたら（1.6）、だまって捨てず cm で入れるよう知らせる", await page.isVisible("#hwerr") && await page.isVisible("#v-settings"));
+  await page.fill("input[name=height]", "160");
+  await page.selectOption("select[name=pace]", "std");
+  check("設定は変えたらすぐ保存する（保存しましたと減量が出る）", /保存しました[\s\S]*減量/.test(await page.textContent("#saved")), await page.textContent("#saved"));
+  // 「目安を出す」を押さずに、きょうへ移っても減量の目安になる（2026-11-23 satou さんの報告）
+  await page.click('nav.tabs button[data-view=today]');
   const dl2 = await page.textContent("#dietline");
+  check("減量：目安の行は「減量の目安」から始まり、輪の横も「減量の目安」", /^減量の目安：1日 2,160kcal/.test(dl2.trim()) && /減量の目安2,160kcal/.test((await page.textContent("#summary")).replace(/\s+/g, "")), dl2);
   // 21.9 × 60kg × 1.75 = 2,300kcal（体重を保つ）、60kg の3% = 1.8kg × 7,000 ÷ 90日 = 140kcal → 2,160kcal
   check("減量：体重から目安 2,300kcal、3か月で3%（1.8kg）なら 1日 140kcal 減らして 2,160kcal", /2,300kcal/.test(dl2) && /140kcal/.test(dl2) && /2,160kcal/.test(dl2) && /2,160kcal/.test(await page.textContent("#summary")), dl2);
   const low = await page.evaluate(() => window.TABETA.targets({ sex: "f", age: 35, act: "1", height: 160, weight: 45, goal: "lose", pace: "std" }));

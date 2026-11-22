@@ -105,9 +105,12 @@
           <option value="slow">ゆっくり：6か月で体重の3%</option><option value="std">ふつう：3か月で体重の3%</option><option value="fast">早め：3か月で体重の5%（BMI 25 以上の人だけ）</option></select>
           <span class="hint">日本肥満学会の指針の「3〜6か月で今の体重の3%」が基本です。急に減らすとリバウンドしやすく、筋肉も落ちます。</span></label>
         <p id="losewarn" class="warn" hidden>BMI が 18.5 未満（低体重）です。減量はおすすめしません。体重を保つ目安を出します。</p>
+        <p id="pacewarn" class="warn" hidden>「早め」は BMI 25 以上の人だけです。「ふつう」か「ゆっくり」を選んでください。</p>
+        <p id="hwerr" class="warn" hidden>身長は cm（100〜230）、体重は kg（25〜300）で入れてください。</p>
         <p id="needhw" class="warn" hidden>減量の目標を出すには、身長と体重を入れてください。</p>
         <label class="row" id="mensesrow"><input type="checkbox" name="menses"> 月経がある（鉄の目安が変わります）</label>
         <button class="primary" type="submit">この内容で目安を出す</button>
+        <p id="saved" class="hint" role="status"></p>
       </form>
     </div>
     <div class="card">
