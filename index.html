@@ -46,6 +46,7 @@
     </div>
     <div class="card">
       <h2>栄養のようす <small id="metcount"></small></h2>
+      <p id="roughnote" class="hint" hidden>ざっくり記録の分は、代表の料理で数えた目安です。</p>
       <div id="nuts"></div>
     </div>
     <details class="card fold" id="suggest" hidden>
@@ -174,6 +175,12 @@
   <button data-view="about"><span class="ti" aria-hidden="true">ℹ️</span>説明</button>
 </nav>
 
+<dialog id="roughdlg" aria-labelledby="roughtitle">
+  <div class="dlg-h"><h2 id="roughtitle">ざっくり記録</h2><button id="roughclose" aria-label="閉じる">×</button></div>
+  <p class="hint">品を選ばずに、量と種類だけで入れます。値は代表の料理での目安です。</p>
+  <div id="roughsize" class="seg" role="group" aria-label="量"></div>
+  <div id="roughtypes" class="roughgrid" aria-label="種類（押すと記録）"></div>
+</dialog>
 <dialog id="adddlg" aria-labelledby="addtitle">
   <div class="dlg-h">
     <h2 id="addtitle">食べたものをたす</h2>
