@@ -132,7 +132,7 @@ try {
   await page.fill("#q", "なっとう");
   check("「なっとう」で納豆が先頭に出る", /納豆/.test(await page.textContent("#list li:first-child")), await page.textContent("#list li:first-child"));
   await page.fill("#q", "豚 ロース");
-  check("「豚 ロース」で成分表の「ぶた ロース」が出る", /ぶた|豚ロース/.test(await page.textContent("#list")));
+  check("「豚 ロース」で成分表の「ぶた ロース」が出る（空白はまとめて入力にしない）", /ぶた|豚ロース/.test(await page.textContent("#list")) && await page.isHidden("#bulk"));
   await page.fill("#q", "ほげほげ");
   check("見つからないときは言いかえと足し方を案内する", /成分表に無いもの/.test(await page.textContent("#list")));
   await page.fill("#q", "なっとう");
@@ -251,6 +251,27 @@ try {
   const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#export")]);
   const saved = JSON.parse(readFileSync(await dl.path(), "utf8"));
   check("書き出したファイルに記録が入っている", saved.days["2026-11-22"]?.length === 5 && saved.profile?.age === 35);
+  // 手入力を減らす（2026-11-23）：いつもの・セット・まとめて入力
+  await page.evaluate(() => { const S = window.TABETA.state; for (const d of ["2026-11-19", "2026-11-20"]) (S.days[d] = S.days[d] || []).push({ key: "f:07107", amt: 120, meal: "s" }); });
+  await page.click('nav.tabs button[data-view=today]');
+  await page.click("#todaybtn");
+  check("いつもの：30日に2回以上入れた品（バナナ）が間食の上に出る", /バナナ/.test(await page.textContent('.meal[data-meal=s] .quick') || ""));
+  await page.click('.meal[data-meal=s] button.chip:has-text("バナナ")');
+  { const last = await page.evaluate(() => { const S = window.TABETA.state; for (const d of ["2026-11-21", "2026-11-20", "2026-11-19"]) { const e = (S.days[d] || []).find((x) => x.meal === "s" && x.key === "f:07107"); if (e) return e.amt; } }); const now = await page.evaluate(() => window.TABETA.state.days["2026-11-22"].filter((e) => e.meal === "s" && e.key === "f:07107").map((e) => e.amt));
+  check("いつもの：押すと、いちばん最近に入れた量で入り、ボタンが消える", now.length === 1 && now[0] === last && (await page.locator('.meal[data-meal=s] button.chip:has-text("バナナ")').count()) === 0, `${now} / ${last}`); }
+  check("セット：写真の見積もりの品（成分表に無い）を除くと1品だけの夜には、保存のボタンを出さない", (await page.locator('.meal[data-meal=d] button.mkset').count()) === 0);
+  await page.click('.meal[data-meal=b] button.mkset');
+  check("セット：朝の2品をセットに保存すると、朝の上に📦が出て保存のボタンが消える", (await page.locator('.meal[data-meal=b] button.chip.set').count()) === 1 && (await page.locator('.meal[data-meal=b] button.mkset').count()) === 0);
+  const bn0 = await page.locator('.meal[data-meal=b] ul li').count();
+  await page.click('.meal[data-meal=b] button.chip.set');
+  check("セット：押すと2品が1回で入る", (await page.locator('.meal[data-meal=b] ul li').count()) === bn0 + 2);
+  await page.click('.meal[data-meal=l] button.add');
+  await page.fill("#q", "ごはん、納豆2、みそ汁");
+  check("まとめて入力：「、」で区切ると3品が出て、「納豆2」は2パック（90g）", (await page.locator("#bulklist li input[type=checkbox]").count()) === 3 && /90g/.test(await page.textContent("#bulklist li:nth-child(2)")), await page.textContent("#bulklist"));
+  const ln0 = await page.locator('.meal[data-meal=l] ul li').count();
+  await page.click("#bulkok");
+  check("まとめて入力：押すと3品が昼に入る", (await page.locator('.meal[data-meal=l] ul li').count()) === ln0 + 3);
+  check("料理を増やした：牛丼・ラーメン・定食で探せる", await page.evaluate(() => ["牛丼", "らーめん", "ていしょく", "おでん"].every((q) => window.TABETA.search(q).some((it) => it.key.startsWith("d:")))));
   await page.click('nav.tabs button[data-view=settings]');
 
   // 減量

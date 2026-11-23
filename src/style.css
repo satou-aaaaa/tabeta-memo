@@ -224,3 +224,9 @@ h2.sec { font-size: 1rem; color: var(--sub); margin: 20px 4px 4px; }
 .pfc { font-size: .92rem; }
 .pfc { gap: 4px 12px; }
 .pfcnote { font-size: .85rem; }
+/* ワンタップ（いつもの・セット） */
+.quick { display: flex; gap: 6px; overflow-x: auto; padding: 6px 0 2px; scrollbar-width: thin; }
+.chip { flex: none; display: inline-flex; flex-direction: column; align-items: flex-start; border-radius: 999px; padding: 6px 14px; min-height: 44px; border: 1px solid var(--main); color: var(--main); background: var(--card); font-weight: bold; font-size: .92rem; line-height: 1.25; }
+.chip small { font-weight: normal; color: var(--sub); font-size: .78rem; }
+.chip.set { background: color-mix(in srgb, var(--main) 10%, var(--card)); }
+.mkset { width: 100%; margin-top: 6px; border-style: dashed; color: var(--sub); font-size: .9rem; }

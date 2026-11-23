@@ -180,7 +180,12 @@
     <select id="addmeal" aria-label="どの食事か"></select>
     <button id="addclose" aria-label="閉じる">×</button>
   </div>
-  <input id="q" type="search" placeholder="食品・料理の名前（例：ごはん、納豆、カレー）" aria-label="食品を探す" autocomplete="off">
+  <input id="q" type="search" placeholder="名前で探す・「ごはん、納豆、みそ汁」でまとめて" aria-label="食品を探す（、で区切るとまとめて入れられます）" autocomplete="off">
+  <div id="bulk" class="photobox" hidden aria-live="polite">
+    <p class="hint">まとめて入れる（量はいつもの1人分。「納豆2」のように数を付けると倍に）</p>
+    <ul id="bulklist" class="photoprev"></ul>
+    <button id="bulkok" class="primary">チェックした品をまとめて記録</button>
+  </div>
   <div id="results">
     <label id="openai" class="ghost filebtn">📷 写真から探す（この端末の中のAI）
       <input id="aifile" type="file" accept="image/*" >
