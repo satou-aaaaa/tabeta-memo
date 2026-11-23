@@ -318,6 +318,24 @@ try {
   check("感想のフォーム：アプリの名前だけを入れて開く（記録の中身を URL に入れない）", /^https:\/\/docs\.google\.com\/forms\//.test(fb) && /entry\.443796210=/.test(fb) && !/kcal|tabeta-memo:v1|\d{4}-\d\d-\d\d/.test(fb), fb);
   await page.click('nav.tabs button[data-view=today]');
 
+  // ざっくり記録：量と種類の2回のタップで1食が入り、目安の注記が出る
+  {
+    const n0 = await page.evaluate(() => { const s = window.TABETA.state; return (s.days[Object.keys(s.days).sort().pop()] || []).length; });
+    await page.click('button.roughbtn[data-meal=l]');
+    check("ざっくり：昼の ⚡ ざっくり で量と種類の画面が開く", await page.isVisible("#roughdlg") && (await page.$$("#roughtypes button")).length >= 10);
+    const normal = await page.textContent('#roughtypes button[data-type="3"] small');
+    await page.click('#roughsize button[data-size="2"]');
+    const big = await page.textContent('#roughtypes button[data-type="3"] small');
+    check("ざっくり：多めにすると目安の kcal が増える", Number(big.replace(/\D/g, "")) > Number(normal.replace(/\D/g, "")), normal + " → " + big);
+    await page.click('#roughtypes button[data-type="3"]');
+    const st = await page.evaluate(() => { const s = window.TABETA.state; const d = s.days[Object.keys(s.days).sort().pop()]; return { n: d.length, last: d[d.length - 1] }; });
+    check("ざっくり：うどん・そば（多め）が昼に1品入る", !(await page.isVisible("#roughdlg")) && st.n === n0 + 1 && st.last.meal === "l" && st.last.rough === 1 && st.last.amt === 1.3 && /ざっくり：うどん・そば（多め）/.test(st.last.label), JSON.stringify(st.last));
+    check("ざっくり：栄養のようすに「目安」の注記が出る", await page.isVisible("#roughnote"));
+    check("ざっくり：食事の欄に名前が出る", /ざっくり：うどん・そば（多め）/.test(await page.textContent("#meals")));
+    await page.evaluate(() => { const s = window.TABETA.state; const d = s.days[Object.keys(s.days).sort().pop()]; if (d[d.length - 1]?.rough) d.splice(d.length - 1, 1); localStorage.setItem("tabeta-memo:v1", JSON.stringify(s)); });
+    await page.reload();
+  }
+
   // 運動（体重 59.5kg・ジョギング 30分：(7.0−1) × 0.5時間 × 59.5kg = 179kcal を目安に足す）
   await page.click("#movecard summary");
   await page.selectOption("#movetype", "jog");

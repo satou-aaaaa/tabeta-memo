@@ -230,3 +230,11 @@ h2.sec { font-size: 1rem; color: var(--sub); margin: 20px 4px 4px; }
 .chip small { font-weight: normal; color: var(--sub); font-size: .78rem; }
 .chip.set { background: color-mix(in srgb, var(--main) 10%, var(--card)); }
 .mkset { width: 100%; margin-top: 6px; border-style: dashed; color: var(--sub); font-size: .9rem; }
+/* ざっくり記録 */
+.addrow { display: flex; gap: 6px; margin-top: 6px; }
+.addrow .add { flex: 1; margin-top: 0; }
+.roughbtn { flex: none; border-style: dashed; color: var(--main); font-weight: bold; padding: 8px 12px; }
+.roughgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; margin-top: 10px; }
+.roughgrid button { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 64px; padding: 6px; line-height: 1.3; }
+.roughgrid button small { color: var(--sub); font-size: .8rem; }
+#roughsize button[aria-pressed=true] { background: var(--main); color: var(--mainink); border-color: var(--main); }

@@ -285,7 +285,7 @@
         ${quickRow(m, list.map((x) => x.e.key))}
         ${list.filter((x) => !x.e.key.startsWith("x:")).length >= 2 && !setOf(m, list.map((x) => x.e).filter((e) => !e.key.startsWith("x:"))) ? `<button class="mkset" data-meal="${m}">＋ この${label}をセットに保存（次から1回で入る）</button>` : ""}
         ${!list.length && lastMeal(m) ? `<button class="copy" data-meal="${m}">↺ ${esc(dayShort(lastMeal(m)))}の${label}と同じ（${fmt(sum(entriesOf(lastMeal(m)).filter((e) => e.meal === m)).kcal)}kcal）</button>` : ""}
-        <button class="add" data-meal="${m}">＋ ${label}をたす</button></div>`;
+        <div class="addrow"><button class="add" data-meal="${m}">＋ ${label}をたす</button><button class="roughbtn" data-meal="${m}" aria-label="${label}をざっくり記録">⚡ ざっくり</button></div></div>`;
     }).join("");
     const adv = advise(tot, T, es, isPast);
     // ひとことは2つまで見せ、残りは「ほかに○件」で開く（長い画面を短くする）
@@ -297,6 +297,8 @@
     const MAIN = ["prot", "fat", "carb", "fib", "salt"];
     const rest = NUTS.filter((n) => !MAIN.includes(n.k));
     const restLow = rest.filter((n) => n.k !== "kcal" && status(n, tot[n.k], T[n.k]) !== "ok").length;
+    const roughN = es.filter((e) => e.rough).length;
+    $("#roughnote").hidden = !roughN;
     $("#nuts").innerHTML = MAIN.map((k) => NUTS.find((n) => n.k === k)).map((n) => bar(n, tot[n.k], T[n.k])).join("")
       + `<details class="nutmore"><summary>ほかの ${rest.length} 項目${es.length ? `（目安の外 ${restLow}）` : ""}</summary>${rest.map((n) => bar(n, tot[n.k], T[n.k])).join("")}</details>`;
   }
@@ -346,6 +348,34 @@
     const name = items.slice(0, 3).map((e) => nameOf(e.key, e.label).replace(/（.*?）/g, "")).join("・") + (items.length > 3 ? "ほか" : "");
     S.sets = (S.sets || []).concat({ id: "s" + Date.now().toString(36), name, meal: m, items }).slice(-20);
     save(); render(); toast(`セット「${name}」を保存しました。次からこの食事の上に出ます`);
+  }
+
+  // ざっくり記録（2026-11-23 satou さんがカードで選択）：品を選ばず「種類」と「量」の2回のタップで1食を入れる。
+  // 細かい記録と減量の効果が同じくらいだった小さな研究（JMIR Formative Research 2022）にならい、忙しい日でも続けられるように。
+  // 値は種類ごとに代表の料理（成分表の組み合わせ）を当て、軽め×0.7・ふつう×1・多め×1.3。
+  const ROUGH = [
+    ["定食", "d:生姜焼き定食", 1], ["丼もの", "d:親子丼", 1], ["カレー", "d:カレーライス", 1], ["うどん・そば", "d:きつねうどん", 1],
+    ["ラーメン", "d:ラーメン（しょうゆ）", 1], ["パスタ", "d:ミートソーススパゲッティ", 1], ["パン・サンド", "d:サンドイッチ（ハム・卵）", 1],
+    ["おにぎり2個", "d:鮭おにぎり", 2], ["ハンバーガー", "d:ハンバーガー", 1], ["お菓子", "f:15103", 30], ["菓子パン・ケーキ", "f:15069", 90],
+  ];
+  const ROUGH_SIZE = [["軽め", 0.7], ["ふつう", 1], ["多め", 1.3]];
+  let roughMeal = "b", roughSize = 1;
+  function openRough(m) {
+    roughMeal = m; roughSize = 1;
+    $("#roughtitle").textContent = `${MEALS.find((x) => x[0] === m)[1]}をざっくり記録`;
+    renderRough();
+    $("#roughdlg").showModal ? $("#roughdlg").showModal() : $("#roughdlg").setAttribute("open", "");
+  }
+  function renderRough() {
+    $("#roughsize").innerHTML = ROUGH_SIZE.map(([l], i) => `<button type="button" data-size="${i}" aria-pressed="${i === roughSize}">${l}</button>`).join("");
+    const mul = ROUGH_SIZE[roughSize][1];
+    $("#roughtypes").innerHTML = ROUGH.map(([l, k, a], i) => `<button type="button" data-type="${i}"><b>${esc(l)}</b><small>約 ${fmt(Math.round(nutOf({ key: k, amt: a * mul }).kcal / 10) * 10)}kcal</small></button>`).join("");
+  }
+  function addRough(i) {
+    const [l, k, a] = ROUGH[i], [sl, mul] = ROUGH_SIZE[roughSize];
+    (S.days[day] = S.days[day] || []).push({ key: k, amt: Math.round(a * mul * 100) / 100, meal: roughMeal, label: `ざっくり：${l}（${sl}）`, rough: 1 });
+    save(); $("#roughdlg").close ? $("#roughdlg").close() : $("#roughdlg").removeAttribute("open"); render();
+    toast(`${l}（${sl}）を入れました。あとで品をおすと量を直せます`);
   }
 
   function copyMeal(m) {
@@ -826,6 +856,7 @@
     $("#todaybtn").onclick = () => { day = ymd(new Date()); render(); };
     $("#meals").addEventListener("click", (e) => {
       const a = e.target.closest("button.add"); if (a) return openAdd(a.dataset.meal);
+      const rb = e.target.closest("button.roughbtn"); if (rb) return openRough(rb.dataset.meal);
       const c = e.target.closest("button.copy"); if (c) return copyMeal(c.dataset.meal);
       const q = e.target.closest("button.chip"); if (q) return addQuick(q);
       const ms = e.target.closest("button.mkset"); if (ms) return makeSet(ms.dataset.meal);
@@ -846,6 +877,9 @@
     $("#back").onclick = () => { $("#pick").hidden = true; $("#results").hidden = false; };
     $("#addclose").onclick = closeAdd;
     $("#bulkok").onclick = commitBulk;
+    $("#roughsize").addEventListener("click", (e) => { const b = e.target.closest("button[data-size]"); if (b) { roughSize = Number(b.dataset.size); renderRough(); } });
+    $("#roughtypes").addEventListener("click", (e) => { const b = e.target.closest("button[data-type]"); if (b) addRough(Number(b.dataset.type)); });
+    $("#roughclose").onclick = () => ($("#roughdlg").close ? $("#roughdlg").close() : $("#roughdlg").removeAttribute("open"));
     $("#firstok").onclick = () => { S.helped = true; save(); render(); };
     $("#openphoto").onclick = () => { $("#photobox").hidden = !$("#photobox").hidden; $("#photoprompt").value = PHOTO_PROMPT; };
     $("#photocopy").onclick = async () => { try { await navigator.clipboard.writeText(PHOTO_PROMPT); toast("コピーしました。Claude に写真といっしょに送ってください"); } catch (e) { $("#photoprompt").select(); toast("下の文を長押ししてコピーしてください"); } };

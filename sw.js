@@ -9,7 +9,7 @@
 //      保存したものは自分の版（cacheName）からだけ探す・入れるときは HTTP の保存を通さない（cache: "reload"）・
 //      長い受信でも保存し直しが終わるまで waitUntil で待つ
 // game:begin
-const CACHE = "tabeta-memo-v5"; // 名前は「<ゲームの短い名前>-v<版>」。中身を大きく変えたら版を上げる
+const CACHE = "tabeta-memo-v6"; // 名前は「<ゲームの短い名前>-v<版>」。中身を大きく変えたら版を上げる
 const SHELL = ["./", "./index.html", "./src/style.css", "./src/app.js", "./src/a11y.js", "./src/a11y.css", "./data/dri.js", "./data/common.js", "./data/menus.js", "./data/exercise.js", "./data/foods.json", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"]; // 画面のファイルを足したらここにも足す
 // game:end
 
