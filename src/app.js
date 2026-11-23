@@ -36,7 +36,7 @@
 
   // ---- 保存 ----
   let saveOk = true;
-  const blank = () => ({ v: 1, profile: null, days: {}, custom: [], recent: [], fav: [], weights: {}, moves: {}, steps: {} });
+  const blank = () => ({ v: 1, profile: null, days: {}, custom: [], recent: [], fav: [], weights: {}, moves: {}, steps: {}, sets: [] });
   function load() {
     try {
       const raw = localStorage.getItem(KEY);
@@ -282,6 +282,8 @@
       return `<div class="meal" data-meal="${m}"><div class="meal-h"><h3><span class="mi" aria-hidden="true">${{ b: "🌅", l: "☀️", d: "🌙", s: "🍪" }[m] || ""}</span>${label}</h3><span>${fmt(mk)}kcal</span></div>
         <ul>${list.map(({ e, i }) => `<li><button class="edit" data-i="${i}" aria-label="${esc(nameOf(e.key, e.label))}の量を直す"><span class="fn">${esc(nameOf(e.key, e.label))}</span><span class="fa">${esc(amtText(e))}・${fmt(nutOf(e).kcal)}kcal</span></button>
           <button class="del" data-i="${i}" aria-label="${esc(nameOf(e.key, e.label))}を消す">×</button></li>`).join("")}</ul>
+        ${quickRow(m, list.map((x) => x.e.key))}
+        ${list.filter((x) => !x.e.key.startsWith("x:")).length >= 2 && !setOf(m, list.map((x) => x.e).filter((e) => !e.key.startsWith("x:"))) ? `<button class="mkset" data-meal="${m}">＋ この${label}をセットに保存（次から1回で入る）</button>` : ""}
         ${!list.length && lastMeal(m) ? `<button class="copy" data-meal="${m}">↺ ${esc(dayShort(lastMeal(m)))}の${label}と同じ（${fmt(sum(entriesOf(lastMeal(m)).filter((e) => e.meal === m)).kcal)}kcal）</button>` : ""}
         <button class="add" data-meal="${m}">＋ ${label}をたす</button></div>`;
     }).join("");
@@ -305,6 +307,47 @@
     return null;
   }
   const dayShort = (d) => (d === addDays(day, -1) ? "前の日" : dayLabel(d).replace(/（.）$/, ""));
+  // ---- 手入力を減らす（2026-11-23 satou さん「ほとんど手動入力になる」）----
+  // 記録の手間が続かない一番の理由（Cordeiro ら CHI 2015）なので、よく食べるものはワンタップ・組み合わせは1回で入れる。
+  // いつもの：この食事（朝・昼など）で30日のうちによく入れた品。量は前に入れた量。
+  function usualFor(m, have) {
+    const cnt = new Map();
+    for (let i = 1; i <= 30; i++) {
+      for (const e of entriesOf(addDays(day, -i))) {
+        if (e.meal !== m || e.key.startsWith("x:")) continue;
+        const c = cnt.get(e.key) || { n: 0, amt: e.amt, label: e.label };
+        c.n++; cnt.set(e.key, c);
+      }
+    }
+    return [...cnt].filter(([k, c]) => c.n >= 2 && !have.includes(k) && itemOf(k)).sort((a, b) => b[1].n - a[1].n).slice(0, 4);
+  }
+  const setKey = (items) => items.map((e) => e.key).sort().join("|");
+  function setOf(m, items) { const k = setKey(items); return (S.sets || []).find((x) => setKey(x.items) === k); }
+  function quickRow(m, have) {
+    const sets = (S.sets || []).filter((x) => x.meal === m || !x.meal);
+    const us = usualFor(m, have);
+    if (!sets.length && !us.length) return "";
+    return `<div class="quick" aria-label="ワンタップで入れる">${sets.map((x) => `<button class="chip set" data-set="${esc(x.id)}" data-meal="${m}">📦 ${esc(x.name)}<small>${fmt(sum(x.items).kcal)}kcal</small></button>`).join("")}
+      ${us.map(([k, c]) => `<button class="chip" data-key="${esc(k)}" data-amt="${c.amt}" data-meal="${m}">＋ ${esc(nameOf(k, c.label))}<small>${esc(amtText({ key: k, amt: c.amt }))}</small></button>`).join("")}</div>`;
+  }
+  function addQuick(b) {
+    const es = (S.days[day] = S.days[day] || []);
+    if (b.dataset.set) {
+      const x = (S.sets || []).find((y) => y.id === b.dataset.set); if (!x) return;
+      es.push(...x.items.map((e) => ({ key: e.key, amt: e.amt, meal: b.dataset.meal, ...(e.label ? { label: e.label } : {}) })));
+      save(); render(); toast(`セット「${x.name}」の ${x.items.length} 品を入れました`); return;
+    }
+    es.push({ key: b.dataset.key, amt: Number(b.dataset.amt), meal: b.dataset.meal });
+    save(); render(); toast(`${nameOf(b.dataset.key)}を入れました。量は品をおすと直せます`);
+  }
+  function makeSet(m) {
+    const items = entriesOf(day).filter((e) => e.meal === m && !e.key.startsWith("x:")).map((e) => ({ key: e.key, amt: e.amt, ...(e.label ? { label: e.label } : {}) }));
+    if (items.length < 2) return;
+    const name = items.slice(0, 3).map((e) => nameOf(e.key, e.label).replace(/（.*?）/g, "")).join("・") + (items.length > 3 ? "ほか" : "");
+    S.sets = (S.sets || []).concat({ id: "s" + Date.now().toString(36), name, meal: m, items }).slice(-20);
+    save(); render(); toast(`セット「${name}」を保存しました。次からこの食事の上に出ます`);
+  }
+
   function copyMeal(m) {
     const from = lastMeal(m); if (!from) return;
     const add = entriesOf(from).filter((e) => e.meal === m).map((e) => JSON.parse(JSON.stringify(e)));
@@ -507,6 +550,7 @@
     for (const b of document.querySelectorAll("#addtabs button")) b.setAttribute("aria-pressed", String(b.dataset.tab === tab && !q));
     $("#addtabs").hidden = !!q;
     let items;
+    renderBulk(q);
     if (q) items = search(q);
     else if (tab === "recent") items = S.recent.map(itemOf).filter(Boolean);
     else if (tab === "fav") items = S.fav.map(itemOf).filter(Boolean);
@@ -514,6 +558,37 @@
     const empty = q ? "見つかりませんでした。ひらがなや別の言い方でも探せます。無いときは下の「成分表に無いものを足す」から入れられます。"
       : tab === "recent" ? "まだありません。記録すると、ここからすぐ選べます。" : "☆を押した食品がここに出ます。";
     $("#list").innerHTML = items.length ? items.map(itemRow).join("") : `<li class="empty">${empty}</li>`;
+  }
+  // まとめて入力：「ごはん、納豆、みそ汁」（区切り：、・，+／改行。空白だけで区切って何も見つからないときも）
+  let bulk = [];
+  function bulkParts(q) {
+    let parts = q.split(/[、,，・+＋/／\n]+/).map((x) => x.trim()).filter(Boolean);
+    if (parts.length < 2) { const sp = q.split(/[\s　]+/).filter(Boolean); if (sp.length >= 2 && !search(q).length) parts = sp; }
+    return parts.length >= 2 ? parts.slice(0, 10) : [];
+  }
+  function renderBulk(q) {
+    const parts = q ? bulkParts(q) : [];
+    bulk = parts.map((t) => { const m = /^(.*?)[×xX*]?\s*([0-9.]+)\s*(個|杯|枚|本|皿|つ)?$/.exec(t.normalize("NFKC")); const name = m && m[1] ? m[1] : t, mul = m && m[1] ? Number(m[2]) : 1; return { t, hit: search(name)[0] || null, mul: mul > 0 && mul <= 10 ? mul : 1 }; });
+    const box = $("#bulk");
+    if (!bulk.length) { box.hidden = true; return; }
+    box.hidden = false;
+    $("#bulklist").innerHTML = bulk.map((b, i) => b.hit ? `<li><label><input type="checkbox" data-i="${i}" checked> <b>${esc(b.hit.name)}</b></label><span>${esc(b.t)} → ${b.hit.key.startsWith("f:") ? `${Math.round((b.hit.g || 100) * b.mul)}g` : `${b.mul}${esc(b.hit.unit || "")}`}・${fmt(nutOf({ key: b.hit.key, amt: b.hit.key.startsWith("f:") ? (b.hit.g || 100) * b.mul : b.mul }).kcal)}kcal</span></li>`
+      : `<li class="empty">「${esc(b.t)}」は見つかりませんでした（別の言い方で）</li>`).join("");
+    $("#bulkok").hidden = !bulk.some((b) => b.hit);
+  }
+  function commitBulk() {
+    const meal = $("#addmeal").value, es = (S.days[day] = S.days[day] || []);
+    let n = 0;
+    bulk.forEach((b, i) => {
+      const c = $(`#bulklist input[data-i="${i}"]`);
+      if (!b.hit || !c || !c.checked) return;
+      const amt = b.hit.key.startsWith("f:") ? Math.round((b.hit.g || 100) * b.mul) : b.mul;
+      es.push({ key: b.hit.key, amt, meal });
+      S.recent = [b.hit.key].concat(S.recent.filter((k) => k !== b.hit.key)).slice(0, 30);
+      n++;
+    });
+    if (!n) return;
+    save(); closeAdd(); render(); toast(`${n} 品をまとめて入れました。量は品をおすと直せます`);
   }
   function search(q) {
     const raw = q.normalize("NFKC");
@@ -752,6 +827,8 @@
     $("#meals").addEventListener("click", (e) => {
       const a = e.target.closest("button.add"); if (a) return openAdd(a.dataset.meal);
       const c = e.target.closest("button.copy"); if (c) return copyMeal(c.dataset.meal);
+      const q = e.target.closest("button.chip"); if (q) return addQuick(q);
+      const ms = e.target.closest("button.mkset"); if (ms) return makeSet(ms.dataset.meal);
       const ed = e.target.closest("button.edit"); if (ed) return openEdit(Number(ed.dataset.i));
       const d = e.target.closest("button.del");
       if (d) { const es = S.days[day]; const [x] = es.splice(Number(d.dataset.i), 1); save(); render(); toast(`${nameOf(x.key, x.label)}を消しました`); }
@@ -768,6 +845,7 @@
     $("#addok").onclick = commitPick;
     $("#back").onclick = () => { $("#pick").hidden = true; $("#results").hidden = false; };
     $("#addclose").onclick = closeAdd;
+    $("#bulkok").onclick = commitBulk;
     $("#firstok").onclick = () => { S.helped = true; save(); render(); };
     $("#openphoto").onclick = () => { $("#photobox").hidden = !$("#photobox").hidden; $("#photoprompt").value = PHOTO_PROMPT; };
     $("#photocopy").onclick = async () => { try { await navigator.clipboard.writeText(PHOTO_PROMPT); toast("コピーしました。Claude に写真といっしょに送ってください"); } catch (e) { $("#photoprompt").select(); toast("下の文を長押ししてコピーしてください"); } };
@@ -853,7 +931,7 @@
     document.body.classList.add("ready");
     render();
   }
-  window.TABETA = { rankByEmbedding, copyMeal, openEdit, showAI, targets, advise, sum, search: (q) => search(q), nutOf, get state() { return S; } };
+  window.TABETA = { rankByEmbedding, usualFor, bulkParts, copyMeal, openEdit, showAI, targets, advise, sum, search: (q) => search(q), nutOf, get state() { return S; } };
   start();
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 })();
